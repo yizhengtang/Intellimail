@@ -43,6 +43,3 @@ def get_access_token(app_id, client_secret, scopes):
     else:
         raise Exception("Failed to acquire access token: " + str(token_response))
     
-
-
-    
