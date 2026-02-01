@@ -1,3 +1,5 @@
+#This file contains all the functions that interact with the Gmail API.
+
 import os
 import base64
 

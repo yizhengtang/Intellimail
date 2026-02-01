@@ -1,4 +1,4 @@
-from Microsoft_API import get_access_token
+from MS_Graph import get_access_token
 import os
 from dotenv import load_dotenv
 
