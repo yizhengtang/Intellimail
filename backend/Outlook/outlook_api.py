@@ -116,23 +116,6 @@ def get_email_message_details(access_token, message_id):
 #This function will send an email with attachments using Microsoft Graph API.
 #Unlike Gmail which uses MIME format, Graph API uses JSON structure with separate fields.
 def send_email_with_attachment(access_token, to, subject, body, body_type='Text', cc=None, bcc=None, attachment_paths=None):
-    """
-    Send an email with optional attachments via Microsoft Graph API.
-
-    Args:
-        access_token: OAuth2 access token
-        to: Recipient email address (string) or list of addresses
-        subject: Email subject
-        body: Email body content
-        body_type: 'Text' or 'HTML' (Graph API format)
-        cc: CC recipients (string or list)
-        bcc: BCC recipients (string or list)
-        attachment_paths: List of file paths to attach
-
-    Returns:
-        Response from Graph API (typically empty on success)
-    """
-
     #Validate body_type (Graph API uses 'Text' or 'HTML', not lowercase)
     if body_type not in ['Text', 'HTML']:
         raise ValueError("body_type must be either 'Text' or 'HTML'")
@@ -276,19 +259,7 @@ def download_attachments(access_token, message_id, download_dir):
 
 #This function will download attachments from all messages in a conversation thread.
 def download_attachments_all(access_token, message_id, download_dir):
-    """
-    Download all attachments from all messages in a conversation thread.
-
-    Args:
-        access_token: OAuth2 access token
-        message_id: The ID of any message in the conversation
-        download_dir: Directory path to save attachments
-
-    Returns:
-        Dictionary with conversation_id and list of all downloaded filenames
-    """
-
-    #First, get the conversation ID from the provided message
+    #First, get the conversation ID from the provided messageID
     endpoint = f'me/messages/{message_id}'
     params = {'$select': 'conversationId'}
 
@@ -299,11 +270,10 @@ def download_attachments_all(access_token, message_id, download_dir):
         raise ValueError(f"Could not find conversation ID for message {message_id}")
 
     #Get messages in this conversation
-    #Note: $filter on conversationId is not reliably supported, so we fetch and filter client-side
     endpoint = 'me/messages'
     params = {
         '$select': 'id,subject,hasAttachments,conversationId,receivedDateTime',
-        '$top': 50,  # Fetch more messages to find conversation threads
+        '$top': 50, 
         '$orderby': 'receivedDateTime desc'
     }
 
@@ -351,4 +321,86 @@ def download_attachments_all(access_token, message_id, download_dir):
         'total_files': len(all_downloaded_files),
         'downloaded_files': all_downloaded_files
     }
+
+#This function will search for individual emails by query.
+def search_emails(access_token, query, max_results=5):
+    messages = []
+    endpoint = 'me/messages'
+
+    #Microsoft Graph API uses $search parameter for searching
+    params = {
+        '$search': f'"{query}"',
+        '$select': 'id,from,subject,receivedDateTime,isRead,hasAttachments',
+        '$top': min(50, max_results) if max_results else 50
+    }
+
+    #Pagination loop
+    while True:
+        result = make_graph_request(access_token, endpoint, params=params)
+
+        #Extract and format the message data
+        for msg in result.get('value', []):
+            messages.append({
+                'id': msg.get('id'),
+                'sender': msg.get('from', {}).get('emailAddress', {}).get('address', 'Unknown sender'),
+                'sender_name': msg.get('from', {}).get('emailAddress', {}).get('name', ''),
+                'subject': msg.get('subject', 'No subject'),
+                'received_time': msg.get('receivedDateTime', 'No date available'),
+                'is_read': msg.get('isRead', False),
+                'has_attachments': msg.get('hasAttachments', False)
+            })
+
+        #Check for next page
+        next_link = result.get('@odata.nextLink')
+        if not next_link or (max_results and len(messages) >= max_results):
+            break
+
+        #Update endpoint for next page
+        endpoint = next_link.replace(MS_GRAPH_BASE_ENDPOINT, '')
+        params = None
+
+    return messages[:max_results] if max_results else messages
+
+#This function will search for email conversations (threads) by query.
+def search_email_conversations(access_token, query, max_results=5):
+    #Search messages first
+    endpoint = 'me/messages'
+    params = {
+        '$search': f'"{query}"',
+        '$select': 'conversationId,subject,from,receivedDateTime',
+        '$top': 50
+    }
+
+    all_messages = []
+
+    #Fetch messages matching the search query
+    while True:
+        result = make_graph_request(access_token, endpoint, params=params)
+        fetched_messages = result.get('value', [])
+        all_messages.extend(fetched_messages)
+
+        #Check if we need more messages
+        next_link = result.get('@odata.nextLink')
+        if not next_link or len(all_messages) >= (max_results * 10):  # Fetch extra to find unique conversations
+            break
+
+        endpoint = next_link.replace(MS_GRAPH_BASE_ENDPOINT, '')
+        params = None
+
+    #Group by conversationId to get unique conversations
+    conversations_dict = {}
+    for msg in all_messages:
+        conv_id = msg.get('conversationId')
+        if conv_id and conv_id not in conversations_dict:
+            conversations_dict[conv_id] = {
+                'conversationId': conv_id,
+                'subject': msg.get('subject', 'No subject'),
+                'from': msg.get('from', {}).get('emailAddress', {}).get('address', 'Unknown'),
+                'from_name': msg.get('from', {}).get('emailAddress', {}).get('name', ''),
+                'received_time': msg.get('receivedDateTime', 'No date')
+            }
+
+    #Convert to list and limit to max_results
+    conversations = list(conversations_dict.values())
+    return conversations[:max_results] if max_results else conversations
 
