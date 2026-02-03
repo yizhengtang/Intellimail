@@ -1,4 +1,5 @@
 import os
+import base64
 import httpx
 from dotenv import load_dotenv
 from MS_Graph import get_access_token, MS_GRAPH_BASE_ENDPOINT
@@ -111,4 +112,243 @@ def get_email_message_details(access_token, message_id):
     }
 
     return email_details
+
+#This function will send an email with attachments using Microsoft Graph API.
+#Unlike Gmail which uses MIME format, Graph API uses JSON structure with separate fields.
+def send_email_with_attachment(access_token, to, subject, body, body_type='Text', cc=None, bcc=None, attachment_paths=None):
+    """
+    Send an email with optional attachments via Microsoft Graph API.
+
+    Args:
+        access_token: OAuth2 access token
+        to: Recipient email address (string) or list of addresses
+        subject: Email subject
+        body: Email body content
+        body_type: 'Text' or 'HTML' (Graph API format)
+        cc: CC recipients (string or list)
+        bcc: BCC recipients (string or list)
+        attachment_paths: List of file paths to attach
+
+    Returns:
+        Response from Graph API (typically empty on success)
+    """
+
+    #Validate body_type (Graph API uses 'Text' or 'HTML', not lowercase)
+    if body_type not in ['Text', 'HTML']:
+        raise ValueError("body_type must be either 'Text' or 'HTML'")
+
+    #Helper function to convert email string or list to Graph API recipient format
+    def format_recipients(recipients):
+        if not recipients:
+            return []
+
+        #Convert single string to list
+        if isinstance(recipients, str):
+            recipients = [recipients]
+
+        #Format each recipient as Graph API expects
+        return [{"emailAddress": {"address": email.strip()}} for email in recipients]
+
+    #Build the message structure
+    message = {
+        "subject": subject,
+        "body": {
+            "contentType": body_type,
+            "content": body
+        },
+        "toRecipients": format_recipients(to)
+    }
+
+    #Add CC recipients if provided
+    if cc:
+        message["ccRecipients"] = format_recipients(cc)
+
+    #Add BCC recipients if provided
+    if bcc:
+        message["bccRecipients"] = format_recipients(bcc)
+
+    #Process attachments if provided
+    if attachment_paths:
+        attachments = []
+
+        for attachment_path in attachment_paths:
+            #Check if file exists
+            if not os.path.exists(attachment_path):
+                raise FileNotFoundError(f"Attachment file '{attachment_path}' not found.")
+
+            #Get filename
+            filename = os.path.basename(attachment_path)
+
+            #Read file and encode to base64
+            with open(attachment_path, 'rb') as file:
+                file_content = file.read()
+                encoded_content = base64.b64encode(file_content).decode('utf-8')
+
+            #Create attachment object in Graph API format
+            attachment = {
+                "@odata.type": "#microsoft.graph.fileAttachment",
+                "name": filename,
+                "contentBytes": encoded_content
+            }
+
+            attachments.append(attachment)
+
+        #Add attachments to message
+        message["attachments"] = attachments
+
+    #Build the request body
+    request_body = {
+        "message": message,
+        "saveToSentItems": True
+    }
+
+    #Send the email using Graph API
+    endpoint = 'me/sendMail'
+    response = make_graph_request(access_token, endpoint, method='POST', json_data=request_body)
+
+    return {"status": "sent", "message": "Email sent successfully"}
+
+#This function will download all attachments from a specific email message.
+def download_attachments(access_token, message_id, download_dir):
+    """
+    Download all attachments from a specific email message.
+
+    Args:
+        access_token: OAuth2 access token
+        message_id: The ID of the message to download attachments from
+        download_dir: Directory path to save attachments
+
+    Returns:
+        List of downloaded filenames
+    """
+
+    #Ensure the download directory exists
+    if not os.path.exists(download_dir):
+        os.makedirs(download_dir)
+
+    #Get all attachments for the message
+    #Note: Don't use $select with contentBytes as it may cause 400 errors
+    endpoint = f'me/messages/{message_id}/attachments'
+
+    result = make_graph_request(access_token, endpoint)
+
+    attachments = result.get('value', [])
+    downloaded_files = []
+
+    #Process each attachment
+    for attachment in attachments:
+        attachment_type = attachment.get('@odata.type', '')
+        filename = attachment.get('name', 'unnamed_attachment')
+
+        #Handle file attachments (most common)
+        if attachment_type == '#microsoft.graph.fileAttachment':
+            #Get base64 encoded content
+            content_bytes = attachment.get('contentBytes', '')
+
+            if content_bytes:
+                #Decode base64 content
+                file_data = base64.b64decode(content_bytes)
+
+                #Create full file path
+                file_path = os.path.join(download_dir, filename)
+
+                #Write to file
+                with open(file_path, 'wb') as f:
+                    f.write(file_data)
+
+                downloaded_files.append(filename)
+                print(f"Attachment '{filename}' downloaded to '{file_path}'")
+            else:
+                print(f"Warning: Attachment '{filename}' has no content")
+
+        #Handle item attachments (embedded emails, calendar items, etc.)
+        elif attachment_type == '#microsoft.graph.itemAttachment':
+            print(f"Skipping item attachment '{filename}' (embedded message/item)")
+
+        #Handle reference attachments (cloud files)
+        elif attachment_type == '#microsoft.graph.referenceAttachment':
+            print(f"Skipping reference attachment '{filename}' (cloud file link)")
+
+        else:
+            print(f"Unknown attachment type: {attachment_type}")
+
+    return downloaded_files
+
+#This function will download attachments from all messages in a conversation thread.
+def download_attachments_all(access_token, message_id, download_dir):
+    """
+    Download all attachments from all messages in a conversation thread.
+
+    Args:
+        access_token: OAuth2 access token
+        message_id: The ID of any message in the conversation
+        download_dir: Directory path to save attachments
+
+    Returns:
+        Dictionary with conversation_id and list of all downloaded filenames
+    """
+
+    #First, get the conversation ID from the provided message
+    endpoint = f'me/messages/{message_id}'
+    params = {'$select': 'conversationId'}
+
+    message = make_graph_request(access_token, endpoint, params=params)
+    conversation_id = message.get('conversationId')
+
+    if not conversation_id:
+        raise ValueError(f"Could not find conversation ID for message {message_id}")
+
+    #Get messages in this conversation
+    #Note: $filter on conversationId is not reliably supported, so we fetch and filter client-side
+    endpoint = 'me/messages'
+    params = {
+        '$select': 'id,subject,hasAttachments,conversationId,receivedDateTime',
+        '$top': 50,  # Fetch more messages to find conversation threads
+        '$orderby': 'receivedDateTime desc'
+    }
+
+    all_messages = []
+
+    #Fetch messages and filter by conversationId client-side
+    while True:
+        result = make_graph_request(access_token, endpoint, params=params)
+        fetched_messages = result.get('value', [])
+
+        #Filter for messages with matching conversationId
+        matching_messages = [msg for msg in fetched_messages if msg.get('conversationId') == conversation_id]
+        all_messages.extend(matching_messages)
+
+        #If we found messages in this conversation, continue fetching to get all of them
+        next_link = result.get('@odata.nextLink')
+        if not next_link or (len(matching_messages) == 0 and len(all_messages) > 0):
+            break
+
+        #Update endpoint for pagination
+        endpoint = next_link.replace(MS_GRAPH_BASE_ENDPOINT, '')
+        params = None
+
+    #Sort by received time (ascending - oldest first)
+    messages = sorted(all_messages, key=lambda x: x.get('receivedDateTime', ''))
+
+    print(f"Found {len(messages)} messages in conversation")
+
+    all_downloaded_files = []
+
+    #Download attachments from each message that has attachments
+    for msg in messages:
+        msg_id = msg.get('id')
+        has_attachments = msg.get('hasAttachments', False)
+
+        if has_attachments:
+            print(f"Downloading attachments from message: {msg.get('subject', 'No subject')}")
+            downloaded = download_attachments(access_token, msg_id, download_dir)
+            all_downloaded_files.extend(downloaded)
+        else:
+            print(f"Skipping message (no attachments): {msg.get('subject', 'No subject')}")
+
+    return {
+        'conversation_id': conversation_id,
+        'total_files': len(all_downloaded_files),
+        'downloaded_files': all_downloaded_files
+    }
 
