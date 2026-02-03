@@ -404,3 +404,21 @@ def search_email_conversations(access_token, query, max_results=5):
     conversations = list(conversations_dict.values())
     return conversations[:max_results] if max_results else conversations
 
+#This function will mark an email as read.
+def mark_as_read(access_token, message_id):
+    endpoint = f'me/messages/{message_id}'
+    json_data = {"isRead": True}
+
+    make_graph_request(access_token, endpoint, method='PATCH', json_data=json_data)
+
+    return f'Message {message_id} marked as read.'
+
+#This function will mark an email as unread.
+def mark_as_unread(access_token, message_id):
+    endpoint = f'me/messages/{message_id}'
+    json_data = {"isRead": False}
+
+    make_graph_request(access_token, endpoint, method='PATCH', json_data=json_data)
+
+    return f'Message {message_id} marked as unread.'
+
