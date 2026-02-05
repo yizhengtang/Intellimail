@@ -423,7 +423,6 @@ def mark_as_unread(access_token, message_id):
     return f'Message {message_id} marked as unread.'
 
 #This function will list all mail folders.
-#Uses GET /me/mailFolders endpoint from Microsoft Graph API.
 def list_folders(access_token, include_hidden=False):
     endpoint = 'me/mailFolders'
 
@@ -462,7 +461,6 @@ def list_folders(access_token, include_hidden=False):
     return folders
 
 #This function will get details for a specific folder by ID.
-#Uses GET /me/mailFolders/{id} endpoint from Microsoft Graph API.
 def get_folder_details(access_token, folder_id):
     endpoint = f'me/mailFolders/{folder_id}'
 
@@ -481,7 +479,6 @@ def get_folder_details(access_token, folder_id):
     return folder_details
 
 #This function will create a new mail folder.
-#Uses POST /me/mailFolders endpoint from Microsoft Graph API.
 def create_folder(access_token, display_name, is_hidden=False):
     endpoint = 'me/mailFolders'
 
@@ -506,7 +503,6 @@ def create_folder(access_token, display_name, is_hidden=False):
     }
 
 #This function will create a child folder under a parent folder.
-#Uses POST /me/mailFolders/{id}/childFolders endpoint from Microsoft Graph API.
 def create_child_folder(access_token, parent_folder_id, display_name, is_hidden=False):
     endpoint = f'me/mailFolders/{parent_folder_id}/childFolders'
 
@@ -531,8 +527,6 @@ def create_child_folder(access_token, parent_folder_id, display_name, is_hidden=
     }
 
 #This function will modify/update an existing folder's display name.
-#Uses PATCH /me/mailFolders/{id} endpoint from Microsoft Graph API.
-#Note: Only displayName can be updated. isHidden cannot be changed after creation.
 def modify_folder(access_token, folder_id, display_name):
     endpoint = f'me/mailFolders/{folder_id}'
 
@@ -553,7 +547,6 @@ def modify_folder(access_token, folder_id, display_name):
     }
 
 #This function will delete a folder by ID.
-#Uses DELETE /me/mailFolders/{id} endpoint from Microsoft Graph API.
 def delete_folder(access_token, folder_id):
     endpoint = f'me/mailFolders/{folder_id}'
 
@@ -562,7 +555,6 @@ def delete_folder(access_token, folder_id):
     return f'Folder with ID {folder_id} deleted successfully.'
 
 #Helper function to map folder name to ID.
-#Similar to Gmail's map_label_name_to_id function.
 def map_folder_name_to_id(access_token, folder_name):
     folders = list_folders(access_token, include_hidden=True)
 
@@ -573,8 +565,6 @@ def map_folder_name_to_id(access_token, folder_name):
     return None
 
 #This function will move a message to a different folder.
-#Uses POST /me/messages/{id}/move endpoint from Microsoft Graph API.
-#destination_id can be a folder ID or well-known folder name (inbox, drafts, deleteditems, etc.)
 def move_message_to_folder(access_token, message_id, destination_id):
     endpoint = f'me/messages/{message_id}/move'
 
@@ -590,4 +580,120 @@ def move_message_to_folder(access_token, message_id, destination_id):
         'parent_folder_id': moved_message.get('parentFolderId'),
         'message': f'Message moved to folder {destination_id}'
     }
+
+#This function will trash a specific email by moving it to the Deleted Items folder.
+#Uses POST /me/messages/{id}/move with destinationId 'deleteditems'.
+def trash_email(access_token, message_id):
+    endpoint = f'me/messages/{message_id}/move'
+
+    json_data = {
+        'destinationId': 'deleteditems'
+    }
+
+    moved_message = make_graph_request(access_token, endpoint, method='POST', json_data=json_data)
+
+    return {
+        'id': moved_message.get('id'),
+        'message': f'Message {message_id} moved to trash.'
+    }
+
+#This function allows trashing multiple emails by batch.
+def trash_email_in_batch(access_token, message_ids):
+    results = []
+
+    for message_id in message_ids:
+        try:
+            result = trash_email(access_token, message_id)
+            results.append({'id': message_id, 'status': 'trashed', 'new_id': result['id']})
+        except Exception as e:
+            results.append({'id': message_id, 'status': 'failed', 'error': str(e)})
+
+    return {
+        'total': len(message_ids),
+        'trashed': len([r for r in results if r['status'] == 'trashed']),
+        'results': results
+    }
+
+#This function will untrash a specific email by moving it back to the Inbox.
+#destination_folder can be 'inbox' (default) or any other folder ID/well-known name.
+def untrash_email(access_token, message_id, destination_folder='inbox'):
+    endpoint = f'me/messages/{message_id}/move'
+
+    json_data = {
+        'destinationId': destination_folder
+    }
+
+    moved_message = make_graph_request(access_token, endpoint, method='POST', json_data=json_data)
+
+    return {
+        'id': moved_message.get('id'),
+        'message': f'Message restored from trash to {destination_folder}.'
+    }
+
+#This function will untrash multiple emails by batch.
+def untrash_email_in_batch(access_token, message_ids, destination_folder='inbox'):
+    results = []
+
+    for message_id in message_ids:
+        try:
+            result = untrash_email(access_token, message_id, destination_folder)
+            results.append({'id': message_id, 'status': 'restored', 'new_id': result['id']})
+        except Exception as e:
+            results.append({'id': message_id, 'status': 'failed', 'error': str(e)})
+
+    return {
+        'total': len(message_ids),
+        'restored': len([r for r in results if r['status'] == 'restored']),
+        'results': results
+    }
+
+#This function permanently deletes an email.
+#Uses DELETE /me/messages/{id} endpoint.
+#Note: In Microsoft Graph, DELETE performs a soft delete (moves to recoverableitemsdeletions).
+def delete_email(access_token, message_id):
+    endpoint = f'me/messages/{message_id}'
+
+    make_graph_request(access_token, endpoint, method='DELETE')
+
+    return f'Message {message_id} deleted.'
+
+#This function will empty the trash (Deleted Items folder).
+#Permanently deletes all messages in the deleteditems folder.
+def empty_trash(access_token):
+    total_deleted = 0
+    endpoint = 'me/mailFolders/deleteditems/messages'
+
+    params = {
+        '$select': 'id',
+        '$top': 50
+    }
+
+    while True:
+        result = make_graph_request(access_token, endpoint, params=params)
+        messages = result.get('value', [])
+
+        if not messages:
+            break
+
+        #Delete each message
+        for msg in messages:
+            try:
+                delete_email(access_token, msg['id'])
+                total_deleted += 1
+            except Exception as e:
+                print(f"Error deleting message {msg['id']}: {e}")
+
+        #Check for next page
+        next_link = result.get('@odata.nextLink')
+        if not next_link:
+            break
+
+        endpoint = next_link.replace(MS_GRAPH_BASE_ENDPOINT, '')
+        params = None
+
+    return total_deleted
+
+#This function will get all messages from the trash (Deleted Items folder).
+def get_trash_messages(access_token, max_results=10):
+    return get_email_messages(access_token, folder_name='deleteditems', max_results=max_results)
 
