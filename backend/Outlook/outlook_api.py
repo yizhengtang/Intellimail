@@ -422,3 +422,172 @@ def mark_as_unread(access_token, message_id):
 
     return f'Message {message_id} marked as unread.'
 
+#This function will list all mail folders.
+#Uses GET /me/mailFolders endpoint from Microsoft Graph API.
+def list_folders(access_token, include_hidden=False):
+    endpoint = 'me/mailFolders'
+
+    #Add parameter to include hidden folders if requested
+    params = {}
+    if include_hidden:
+        params['includeHiddenFolders'] = 'true'
+
+    folders = []
+
+    #Pagination loop
+    while True:
+        result = make_graph_request(access_token, endpoint, params=params if params else None)
+
+        #Extract and format folder data
+        for folder in result.get('value', []):
+            folders.append({
+                'id': folder.get('id'),
+                'display_name': folder.get('displayName'),
+                'parent_folder_id': folder.get('parentFolderId'),
+                'child_folder_count': folder.get('childFolderCount', 0),
+                'unread_item_count': folder.get('unreadItemCount', 0),
+                'total_item_count': folder.get('totalItemCount', 0),
+                'is_hidden': folder.get('isHidden', False)
+            })
+
+        #Check for next page
+        next_link = result.get('@odata.nextLink')
+        if not next_link:
+            break
+
+        #Update endpoint for next page
+        endpoint = next_link.replace(MS_GRAPH_BASE_ENDPOINT, '')
+        params = None
+
+    return folders
+
+#This function will get details for a specific folder by ID.
+#Uses GET /me/mailFolders/{id} endpoint from Microsoft Graph API.
+def get_folder_details(access_token, folder_id):
+    endpoint = f'me/mailFolders/{folder_id}'
+
+    folder = make_graph_request(access_token, endpoint)
+
+    folder_details = {
+        'id': folder.get('id'),
+        'display_name': folder.get('displayName'),
+        'parent_folder_id': folder.get('parentFolderId'),
+        'child_folder_count': folder.get('childFolderCount', 0),
+        'unread_item_count': folder.get('unreadItemCount', 0),
+        'total_item_count': folder.get('totalItemCount', 0),
+        'is_hidden': folder.get('isHidden', False)
+    }
+
+    return folder_details
+
+#This function will create a new mail folder.
+#Uses POST /me/mailFolders endpoint from Microsoft Graph API.
+def create_folder(access_token, display_name, is_hidden=False):
+    endpoint = 'me/mailFolders'
+
+    json_data = {
+        'displayName': display_name
+    }
+
+    #Only include isHidden if set to True (default is False)
+    if is_hidden:
+        json_data['isHidden'] = True
+
+    created_folder = make_graph_request(access_token, endpoint, method='POST', json_data=json_data)
+
+    return {
+        'id': created_folder.get('id'),
+        'display_name': created_folder.get('displayName'),
+        'parent_folder_id': created_folder.get('parentFolderId'),
+        'child_folder_count': created_folder.get('childFolderCount', 0),
+        'unread_item_count': created_folder.get('unreadItemCount', 0),
+        'total_item_count': created_folder.get('totalItemCount', 0),
+        'is_hidden': created_folder.get('isHidden', False)
+    }
+
+#This function will create a child folder under a parent folder.
+#Uses POST /me/mailFolders/{id}/childFolders endpoint from Microsoft Graph API.
+def create_child_folder(access_token, parent_folder_id, display_name, is_hidden=False):
+    endpoint = f'me/mailFolders/{parent_folder_id}/childFolders'
+
+    json_data = {
+        'displayName': display_name
+    }
+
+    #Only include isHidden if set to True (default is False)
+    if is_hidden:
+        json_data['isHidden'] = True
+
+    created_folder = make_graph_request(access_token, endpoint, method='POST', json_data=json_data)
+
+    return {
+        'id': created_folder.get('id'),
+        'display_name': created_folder.get('displayName'),
+        'parent_folder_id': created_folder.get('parentFolderId'),
+        'child_folder_count': created_folder.get('childFolderCount', 0),
+        'unread_item_count': created_folder.get('unreadItemCount', 0),
+        'total_item_count': created_folder.get('totalItemCount', 0),
+        'is_hidden': created_folder.get('isHidden', False)
+    }
+
+#This function will modify/update an existing folder's display name.
+#Uses PATCH /me/mailFolders/{id} endpoint from Microsoft Graph API.
+#Note: Only displayName can be updated. isHidden cannot be changed after creation.
+def modify_folder(access_token, folder_id, display_name):
+    endpoint = f'me/mailFolders/{folder_id}'
+
+    json_data = {
+        'displayName': display_name
+    }
+
+    updated_folder = make_graph_request(access_token, endpoint, method='PATCH', json_data=json_data)
+
+    return {
+        'id': updated_folder.get('id'),
+        'display_name': updated_folder.get('displayName'),
+        'parent_folder_id': updated_folder.get('parentFolderId'),
+        'child_folder_count': updated_folder.get('childFolderCount', 0),
+        'unread_item_count': updated_folder.get('unreadItemCount', 0),
+        'total_item_count': updated_folder.get('totalItemCount', 0),
+        'is_hidden': updated_folder.get('isHidden', False)
+    }
+
+#This function will delete a folder by ID.
+#Uses DELETE /me/mailFolders/{id} endpoint from Microsoft Graph API.
+def delete_folder(access_token, folder_id):
+    endpoint = f'me/mailFolders/{folder_id}'
+
+    make_graph_request(access_token, endpoint, method='DELETE')
+
+    return f'Folder with ID {folder_id} deleted successfully.'
+
+#Helper function to map folder name to ID.
+#Similar to Gmail's map_label_name_to_id function.
+def map_folder_name_to_id(access_token, folder_name):
+    folders = list_folders(access_token, include_hidden=True)
+
+    for folder in folders:
+        if folder['display_name'].lower() == folder_name.lower():
+            return folder['id']
+
+    return None
+
+#This function will move a message to a different folder.
+#Uses POST /me/messages/{id}/move endpoint from Microsoft Graph API.
+#destination_id can be a folder ID or well-known folder name (inbox, drafts, deleteditems, etc.)
+def move_message_to_folder(access_token, message_id, destination_id):
+    endpoint = f'me/messages/{message_id}/move'
+
+    json_data = {
+        'destinationId': destination_id
+    }
+
+    moved_message = make_graph_request(access_token, endpoint, method='POST', json_data=json_data)
+
+    return {
+        'id': moved_message.get('id'),
+        'subject': moved_message.get('subject', 'No subject'),
+        'parent_folder_id': moved_message.get('parentFolderId'),
+        'message': f'Message moved to folder {destination_id}'
+    }
+
