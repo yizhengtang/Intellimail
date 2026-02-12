@@ -697,3 +697,208 @@ def empty_trash(access_token):
 def get_trash_messages(access_token, max_results=10):
     return get_email_messages(access_token, folder_name='deleteditems', max_results=max_results)
 
+#This function will create a draft email message.
+#Unlike Gmail which uses MIME format, Graph API uses JSON structure with separate fields.
+def create_draft_email(access_token, to, subject, body, body_type='Text', cc=None, bcc=None, attachment_paths=None):
+    #Validate body_type (Graph API uses 'Text' or 'HTML')
+    if body_type not in ['Text', 'HTML']:
+        raise ValueError("body_type must be either 'Text' or 'HTML'")
+
+    #Helper function to convert email string or list to Graph API recipient format
+    def format_recipients(recipients):
+        if not recipients:
+            return []
+        if isinstance(recipients, str):
+            recipients = [recipients]
+        return [{"emailAddress": {"address": email.strip()}} for email in recipients]
+
+    #Build the draft message structure
+    message = {
+        "subject": subject,
+        "body": {
+            "contentType": body_type,
+            "content": body
+        },
+        "toRecipients": format_recipients(to)
+    }
+
+    #Add CC recipients if provided
+    if cc:
+        message["ccRecipients"] = format_recipients(cc)
+
+    #Add BCC recipients if provided
+    if bcc:
+        message["bccRecipients"] = format_recipients(bcc)
+
+    #Create the draft first via POST /me/messages
+    endpoint = 'me/messages'
+    created_draft = make_graph_request(access_token, endpoint, method='POST', json_data=message)
+
+    draft_id = created_draft.get('id')
+
+    #If attachment paths are provided, upload them to the draft message
+    #Attachments are added separately after draft creation using POST /me/messages/{id}/attachments
+    if attachment_paths:
+        for attachment_path in attachment_paths:
+            if not os.path.exists(attachment_path):
+                raise FileNotFoundError(f"Attachment file '{attachment_path}' not found.")
+
+            filename = os.path.basename(attachment_path)
+
+            with open(attachment_path, 'rb') as file:
+                file_content = file.read()
+                encoded_content = base64.b64encode(file_content).decode('utf-8')
+
+            attachment = {
+                "@odata.type": "#microsoft.graph.fileAttachment",
+                "name": filename,
+                "contentBytes": encoded_content
+            }
+
+            attachment_endpoint = f'me/messages/{draft_id}/attachments'
+            make_graph_request(access_token, attachment_endpoint, method='POST', json_data=attachment)
+
+    #Return the created draft details
+    return {
+        'id': draft_id,
+        'subject': created_draft.get('subject', 'No subject'),
+        'status': 'draft created'
+    }
+
+#This function will list all draft email messages from the Drafts folder.
+#Uses GET /me/mailFolders/drafts/messages endpoint with pagination.
+def list_draft_email_messages(access_token, max_results=10):
+    messages = []
+    endpoint = 'me/mailFolders/drafts/messages'
+
+    params = {
+        '$top': min(50, max_results),
+        '$select': 'id,subject,toRecipients,createdDateTime,hasAttachments,bodyPreview',
+        '$orderby': 'createdDateTime desc'
+    }
+
+    #Pagination loop
+    while True:
+        result = make_graph_request(access_token, endpoint, params=params)
+
+        for msg in result.get('value', []):
+            #Extract the first recipient's email address if available
+            to_recipients = msg.get('toRecipients', [])
+            to_address = to_recipients[0].get('emailAddress', {}).get('address', '') if to_recipients else ''
+
+            messages.append({
+                'id': msg.get('id'),
+                'subject': msg.get('subject', 'No subject'),
+                'to': to_address,
+                'created_time': msg.get('createdDateTime', 'No date available'),
+                'has_attachments': msg.get('hasAttachments', False),
+                'body_preview': msg.get('bodyPreview', '')
+            })
+
+        #Check for next page
+        next_link = result.get('@odata.nextLink')
+        if not next_link or len(messages) >= max_results:
+            break
+
+        endpoint = next_link.replace(MS_GRAPH_BASE_ENDPOINT, '')
+        params = None
+
+    return messages[:max_results] if max_results else messages
+
+#This function will get the full details of a specific draft email by ID.
+#Uses GET /me/messages/{id} endpoint, same as regular email but filtered for drafts.
+def get_draft_email_details(access_token, draft_id):
+    endpoint = f'me/messages/{draft_id}'
+
+    params = {
+        '$select': 'id,subject,from,toRecipients,ccRecipients,bccRecipients,body,createdDateTime,lastModifiedDateTime,hasAttachments,importance,isDraft,conversationId'
+    }
+
+    message = make_graph_request(access_token, endpoint, params=params)
+
+    draft_details = {
+        'id': message.get('id'),
+        'subject': message.get('subject', 'No subject'),
+        'from': message.get('from', {}).get('emailAddress', {}).get('address', 'Unknown sender'),
+        'from_name': message.get('from', {}).get('emailAddress', {}).get('name', ''),
+        'to': ', '.join([r.get('emailAddress', {}).get('address', '') for r in message.get('toRecipients', [])]),
+        'cc': ', '.join([r.get('emailAddress', {}).get('address', '') for r in message.get('ccRecipients', [])]),
+        'bcc': ', '.join([r.get('emailAddress', {}).get('address', '') for r in message.get('bccRecipients', [])]),
+        'body': message.get('body', {}).get('content', '<Text body not available>'),
+        'body_type': message.get('body', {}).get('contentType', 'text'),
+        'created_time': message.get('createdDateTime', 'No date available'),
+        'last_modified_time': message.get('lastModifiedDateTime', 'No date available'),
+        'has_attachments': message.get('hasAttachments', False),
+        'importance': message.get('importance', 'normal'),
+        'is_draft': message.get('isDraft', False),
+        'conversation_id': message.get('conversationId', draft_id)
+    }
+
+    return draft_details
+
+#This function will send a draft email by its message ID.
+#Uses POST /me/messages/{id}/send endpoint.
+#The draft must already exist in the Drafts folder.
+def send_draft_email(access_token, draft_id):
+    endpoint = f'me/messages/{draft_id}/send'
+
+    make_graph_request(access_token, endpoint, method='POST')
+
+    return {'status': 'sent', 'message': f'Draft {draft_id} sent successfully.'}
+
+#This function will delete a draft email by its message ID.
+#Uses DELETE /me/messages/{id} endpoint, same as deleting any message.
+def delete_draft_email(access_token, draft_id):
+    endpoint = f'me/messages/{draft_id}'
+
+    make_graph_request(access_token, endpoint, method='DELETE')
+
+    return f'Draft {draft_id} deleted successfully.'
+
+#This function will update an existing draft email.
+#Uses PATCH /me/messages/{id} endpoint.
+#Only draft messages (isDraft = true) can have their subject, body, and recipients updated.
+def update_draft_email(access_token, draft_id, subject=None, body=None, body_type=None, to=None, cc=None, bcc=None):
+    #Helper function to convert email string or list to Graph API recipient format
+    def format_recipients(recipients):
+        if not recipients:
+            return []
+        if isinstance(recipients, str):
+            recipients = [recipients]
+        return [{"emailAddress": {"address": email.strip()}} for email in recipients]
+
+    #Build the update payload with only the fields that are provided
+    json_data = {}
+
+    if subject is not None:
+        json_data['subject'] = subject
+
+    if body is not None:
+        #If body_type is not specified, default to 'Text'
+        content_type = body_type if body_type in ['Text', 'HTML'] else 'Text'
+        json_data['body'] = {
+            'contentType': content_type,
+            'content': body
+        }
+
+    if to is not None:
+        json_data['toRecipients'] = format_recipients(to)
+
+    if cc is not None:
+        json_data['ccRecipients'] = format_recipients(cc)
+
+    if bcc is not None:
+        json_data['bccRecipients'] = format_recipients(bcc)
+
+    if not json_data:
+        raise ValueError("No fields provided to update.")
+
+    endpoint = f'me/messages/{draft_id}'
+    updated_draft = make_graph_request(access_token, endpoint, method='PATCH', json_data=json_data)
+
+    return {
+        'id': updated_draft.get('id'),
+        'subject': updated_draft.get('subject', 'No subject'),
+        'status': 'draft updated'
+    }
+
