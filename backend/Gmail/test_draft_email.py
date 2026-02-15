@@ -8,14 +8,21 @@ subject = "Test Draft Email"
 body = "This is a test draft email created using the Gmail API."
 attachment_dir = Path('./attachments')
 attachment_files = list(attachment_dir.glob('*'))
+draft_id = 'r8760051419467203110'
 
-draft_email_response = create_draft_email(
-    service,
-    to_address,
-    subject,
-    body,
-    body_type='plain',
-    attachment_paths=attachment_files
-)
-print(f"Draft email created with ID: {draft_email_response['id']}")
+# draft_email_response = create_draft_email(
+#     service,
+#     to_address,
+#     subject,
+#     body,
+#     body_type='plain',
+#     attachment_paths=attachment_files
+# )
+# print(f"Draft email created with ID: {draft_email_response['id']}")
+
+response = get_draft_email_details(service, draft_id)
+
+#response = list_draft_email_messages(service)
+
+print(response)
 
