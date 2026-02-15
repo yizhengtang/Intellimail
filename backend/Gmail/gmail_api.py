@@ -235,8 +235,6 @@ def download_attachments_all(service, user_id, message_id, download_dir):
     messages = thread.get('messages', [])
     for msg in messages:
         download_attachments(service, user_id, msg['id'], download_dir)
-    gmail_service = service.users().messages()
-    return gmail_service
         
 #This function will try to look for individual emails.
 def search_emails(service, query, user_id='me', max_results=5):
@@ -488,24 +486,18 @@ def get_draft_email_details(service, draft_id, format='full'):
     star = draft_message.get('labelIds', []).count('STARRED') > 0
     label = ' , '.join(draft_message.get('labelIds', []))
 
-    body = '<Text body not available>'
-    if 'parts' in draft_payload:
-        for part in draft_payload['parts']:
-            if part['mimeType'] == 'multipart/alternative':
-                for subpart in part['parts']:
-                    if subpart['mimeType'] == 'text/plain' and 'data' in subpart['body']:
-                        body = base64.urlsafe_b64decode(subpart['body']['data']).decode('utf-8')
-                        break
-            elif part['mimeType'] == 'text/plain' and 'data' in part['body']:
-                body = base64.urlsafe_b64decode(part['body']['data']).decode('utf-8')
-                break
+    #Using the extract_body function to get the body content from the draft payload.
+    #This handles all email formats: multipart, nested multipart/alternative, and simple single-part.
+    body = extract_body(draft_payload)
 
     draft_details = {
+        'id': draft_id,
         'subject': subject,
         'from': sender,
         'to': recipient,
         'body': body,
         'snippet': snippet,
+        'thread_id': thread_id,
         'has_attachments': has_attachments,
         'date': date,
         'starred': star,
