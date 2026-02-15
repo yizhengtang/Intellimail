@@ -18,11 +18,15 @@ def initialize_outlook_service(scopes=['https://graph.microsoft.com/Mail.ReadWri
     return access_token
 
 #Helper function to make requests to Microsoft Graph API
-def make_graph_request(access_token, endpoint, method='GET', params=None, json_data=None):
+def make_graph_request(access_token, endpoint, method='GET', params=None, json_data=None, extra_headers=None):
     headers = {
         'Authorization': f'Bearer {access_token}',
         'Content-Type': 'application/json'
     }
+
+    #Merge any extra headers (e.g. Prefer header for body content type)
+    if extra_headers:
+        headers.update(extra_headers)
 
     url = f'{MS_GRAPH_BASE_ENDPOINT}{endpoint}'
 
@@ -696,6 +700,65 @@ def empty_trash(access_token):
 #This function will get all messages from the trash (Deleted Items folder).
 def get_trash_messages(access_token, max_results=10):
     return get_email_messages(access_token, folder_name='deleteditems', max_results=max_results)
+
+#This function will get the entire conversation of an email by message ID.
+#Returns the full details of each message in the conversation, sorted by date (oldest first).
+def get_email_conversations(access_token, message_id):
+    #First, get the conversation ID from the provided message
+    endpoint = f'me/messages/{message_id}'
+    params = {'$select': 'conversationId'}
+
+    message = make_graph_request(access_token, endpoint, params=params)
+    conversation_id = message.get('conversationId')
+
+    if not conversation_id:
+        raise ValueError(f"Could not find conversation ID for message {message_id}")
+
+    #Fetch all messages in this conversation using $filter for server-side filtering
+    #This is more efficient than fetching all messages and filtering client-side
+    endpoint = 'me/messages'
+    params = {
+        '$filter': f"conversationId eq '{conversation_id}'",
+        '$select': 'id,subject,from,toRecipients,body,receivedDateTime,hasAttachments',
+        '$top': 50
+    }
+
+    #Use Prefer header to request plain text body instead of HTML
+    #By default Graph API returns HTML which includes raw tags in the response
+    prefer_headers = {'Prefer': 'outlook.body-content-type="text"'}
+
+    all_messages = []
+
+    #Pagination loop to get all messages in the conversation
+    while True:
+        result = make_graph_request(access_token, endpoint, params=params, extra_headers=prefer_headers)
+        all_messages.extend(result.get('value', []))
+
+        next_link = result.get('@odata.nextLink')
+        if not next_link:
+            break
+
+        endpoint = next_link.replace(MS_GRAPH_BASE_ENDPOINT, '')
+        params = None
+
+    #Sort by received time ascending (oldest first) to show conversation in chronological order
+    all_messages.sort(key=lambda x: x.get('receivedDateTime', ''))
+
+    #Process each message into a consistent format matching the Gmail version
+    processed_messages = []
+    for msg in all_messages:
+        processed_messages.append({
+            'id': msg.get('id'),
+            'subject': msg.get('subject', 'No subject'),
+            'from': msg.get('from', {}).get('emailAddress', {}).get('address', 'Unknown sender'),
+            'from_name': msg.get('from', {}).get('emailAddress', {}).get('name', ''),
+            'to': ', '.join([r.get('emailAddress', {}).get('address', '') for r in msg.get('toRecipients', [])]),
+            'body': msg.get('body', {}).get('content', '<Text body not available>'),
+            'date': msg.get('receivedDateTime', 'No date available'),
+            'has_attachments': msg.get('hasAttachments', False)
+        })
+
+    return processed_messages
 
 #This function will create a draft email message.
 #Unlike Gmail which uses MIME format, Graph API uses JSON structure with separate fields.

@@ -1,4 +1,5 @@
 venv/
+PROJECT_PLAN.md
 
 ##Backend
 backend/.env
