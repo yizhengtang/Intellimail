@@ -191,6 +191,167 @@ def send_email_with_attachment(service, to, subject, body, body_type='plain', at
 
     return sent_message
 
+#This function will reply to the sender of a specific email.
+def reply_email(service, message_id, body, body_type='plain', attachment_paths=None):
+    #First, fetch the original message to get the threading headers and sender info.
+    original = service.users().messages().get(userId='me', id=message_id, format='full').execute()
+    headers = original['payload'].get('headers', [])
+
+    #Extract required headers from the original message.
+    original_message_id = next((h['value'] for h in headers if h['name'].lower() == 'message-id'), None)
+    original_subject = next((h['value'] for h in headers if h['name'].lower() == 'subject'), 'No subject')
+    original_sender = next((h['value'] for h in headers if h['name'].lower() == 'from'), None)
+    original_references = next((h['value'] for h in headers if h['name'].lower() == 'references'), '')
+    thread_id = original.get('threadId')
+
+    if not original_sender:
+        raise ValueError("Could not find the sender of the original message.")
+
+    #Build the reply subject - add "Re: " prefix if not already present.
+    reply_subject = original_subject if original_subject.lower().startswith('re:') else f'Re: {original_subject}'
+
+    #Build the References header: original References + original Message-ID
+    references = f'{original_references} {original_message_id}'.strip() if original_message_id else original_references
+
+    #Validate body_type
+    if body_type.lower() not in ['plain', 'html']:
+        raise ValueError("body_type must be either 'plain' or 'html'")
+
+    #Create the MIME message for the reply
+    message = MIMEMultipart()
+    message['to'] = original_sender
+    message['subject'] = reply_subject
+
+    #Set threading headers
+    if original_message_id:
+        message['In-Reply-To'] = original_message_id
+        message['References'] = references
+
+    message.attach(MIMEText(body, body_type.lower()))
+
+    #Process attachments if provided
+    if attachment_paths:
+        for attachment_path in attachment_paths:
+            if os.path.exists(attachment_path):
+                filename = os.path.basename(attachment_path)
+                with open(attachment_path, 'rb') as attachment_file:
+                    part = MIMEBase('application', 'octet-stream')
+                    part.set_payload(attachment_file.read())
+                encoders.encode_base64(part)
+                part.add_header("Content-Disposition", f'attachment; filename="{filename}"')
+                message.attach(part)
+            else:
+                raise FileNotFoundError(f"Attachment file '{attachment_path}' not found.")
+
+    raw_message = base64.urlsafe_b64encode(message.as_bytes()).decode('utf-8')
+
+    #Send the reply, including the threadId to ensure proper threading.
+    sent_message = service.users().messages().send(
+        userId='me',
+        body={'raw': raw_message, 'threadId': thread_id}
+    ).execute()
+
+    return sent_message
+
+#This function will reply to all recipients of a specific email (sender + all To/Cc recipients).
+def reply_all_email(service, message_id, body, body_type='plain', attachment_paths=None):
+    #Fetch the original message
+    original = service.users().messages().get(userId='me', id=message_id, format='full').execute()
+    headers = original['payload'].get('headers', [])
+
+    #Extract required headers
+    original_message_id = next((h['value'] for h in headers if h['name'].lower() == 'message-id'), None)
+    original_subject = next((h['value'] for h in headers if h['name'].lower() == 'subject'), 'No subject')
+    original_sender = next((h['value'] for h in headers if h['name'].lower() == 'from'), '')
+    original_to = next((h['value'] for h in headers if h['name'].lower() == 'to'), '')
+    original_cc = next((h['value'] for h in headers if h['name'].lower() == 'cc'), '')
+    original_references = next((h['value'] for h in headers if h['name'].lower() == 'references'), '')
+    thread_id = original.get('threadId')
+
+    #Get the current user's email to exclude from recipients (avoid replying to yourself)
+    profile = service.users().getProfile(userId='me').execute()
+    my_email = profile.get('emailAddress', '').lower()
+
+    #Build the full recipient list: original sender + all To recipients, excluding yourself
+    all_to = [original_sender]
+    if original_to:
+        all_to.extend([addr.strip() for addr in original_to.split(',')])
+
+    #Remove duplicates and filter out the current user's email
+    seen = set()
+    filtered_to = []
+    for addr in all_to:
+        #Extract just the email from "Name <email>" format for comparison
+        email_part = addr.lower()
+        if '<' in email_part:
+            email_part = email_part.split('<')[1].split('>')[0]
+        if email_part not in seen and email_part != my_email:
+            seen.add(email_part)
+            filtered_to.append(addr)
+
+    #Filter Cc recipients similarly
+    filtered_cc = []
+    if original_cc:
+        for addr in original_cc.split(','):
+            addr = addr.strip()
+            email_part = addr.lower()
+            if '<' in email_part:
+                email_part = email_part.split('<')[1].split('>')[0]
+            if email_part not in seen and email_part != my_email:
+                seen.add(email_part)
+                filtered_cc.append(addr)
+
+    #Build reply subject
+    if original_subject.lower().startswith('re:'):
+        reply_subject = original_subject
+    else:
+        f'Re: {original_subject}'
+
+    #Build References header
+    references = f'{original_references} {original_message_id}'.strip() if original_message_id else original_references
+
+    #Validate body_type
+    if body_type.lower() not in ['plain', 'html']:
+        raise ValueError("body_type must be either 'plain' or 'html'")
+
+    #Create the MIME message
+    message = MIMEMultipart()
+    message['to'] = ', '.join(filtered_to)
+    if filtered_cc:
+        message['cc'] = ', '.join(filtered_cc)
+    message['subject'] = reply_subject
+
+    #Set threading headers
+    if original_message_id:
+        message['In-Reply-To'] = original_message_id
+        message['References'] = references
+
+    message.attach(MIMEText(body, body_type.lower()))
+
+    #Process attachments if provided
+    if attachment_paths:
+        for attachment_path in attachment_paths:
+            if os.path.exists(attachment_path):
+                filename = os.path.basename(attachment_path)
+                with open(attachment_path, 'rb') as attachment_file:
+                    part = MIMEBase('application', 'octet-stream')
+                    part.set_payload(attachment_file.read())
+                encoders.encode_base64(part)
+                part.add_header("Content-Disposition", f'attachment; filename="{filename}"')
+                message.attach(part)
+            else:
+                raise FileNotFoundError(f"Attachment file '{attachment_path}' not found.")
+
+    raw_message = base64.urlsafe_b64encode(message.as_bytes()).decode('utf-8')
+
+    #Send the reply-all, including the threadId for proper threading.
+    sent_message = service.users().messages().send(
+        userId='me',
+        body={'raw': raw_message, 'threadId': thread_id}
+    ).execute()
+
+    return sent_message
+
 #This download function will download attachments from a specific email message.
 def download_attachments(service, user_id, message_id, download_dir):
     #Fetch the full email message using the provided message ID.
