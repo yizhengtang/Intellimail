@@ -195,20 +195,135 @@ def send_email_with_attachment(access_token, to, subject, body, body_type='Text'
 
     return {"status": "sent", "message": "Email sent successfully"}
 
+#This function will reply to the sender of a specific email message.
+def reply_email(access_token, message_id, comment, body_type='Text', attachment_paths=None):
+    #Validate body_type (Graph API uses 'Text' or 'HTML')
+    if body_type not in ['Text', 'HTML']:
+        raise ValueError("body_type must be either 'Text' or 'HTML'")
+
+    if attachment_paths:
+        #When attachments are needed, use createReply to produce a draft first,
+        #then attach files, then send the draft.
+        #POST /me/messages/{id}/createReply returns a new draft message object.
+        create_endpoint = f'me/messages/{message_id}/createReply'
+        json_data = {
+            "comment": comment
+        }
+        draft = make_graph_request(access_token, create_endpoint, method='POST', json_data=json_data)
+        draft_id = draft.get('id')
+
+        #Update the draft body content type if HTML was requested.
+        #createReply preserves the original body type; patch it if we need a different type.
+        if body_type == 'HTML':
+            patch_endpoint = f'me/messages/{draft_id}'
+            patch_data = {
+                "body": {
+                    "contentType": body_type,
+                    "content": comment
+                }
+            }
+            make_graph_request(access_token, patch_endpoint, method='PATCH', json_data=patch_data)
+
+        #Add each attachment to the draft via POST /me/messages/{draft_id}/attachments
+        for attachment_path in attachment_paths:
+            if not os.path.exists(attachment_path):
+                raise FileNotFoundError(f"Attachment file '{attachment_path}' not found.")
+
+            filename = os.path.basename(attachment_path)
+
+            with open(attachment_path, 'rb') as file:
+                file_content = file.read()
+                encoded_content = base64.b64encode(file_content).decode('utf-8')
+
+            attachment = {
+                "@odata.type": "#microsoft.graph.fileAttachment",
+                "name": filename,
+                "contentBytes": encoded_content
+            }
+
+            attachment_endpoint = f'me/messages/{draft_id}/attachments'
+            make_graph_request(access_token, attachment_endpoint, method='POST', json_data=attachment)
+
+        #Send the draft via POST /me/messages/{draft_id}/send
+        send_endpoint = f'me/messages/{draft_id}/send'
+        make_graph_request(access_token, send_endpoint, method='POST')
+
+    else:
+        #No attachments - use the direct reply endpoint.
+        #POST /me/messages/{id}/reply with a comment sends the reply immediately.
+        reply_endpoint = f'me/messages/{message_id}/reply'
+        json_data = {
+            "comment": comment
+        }
+        make_graph_request(access_token, reply_endpoint, method='POST', json_data=json_data)
+
+    return {"status": "sent", "message": "Reply sent successfully"}
+
+#This function will reply to all recipients of a specific email message (sender + all To/Cc).
+def reply_all_email(access_token, message_id, comment, body_type='Text', attachment_paths=None):
+    #Validate body_type (Graph API uses 'Text' or 'HTML')
+    if body_type not in ['Text', 'HTML']:
+        raise ValueError("body_type must be either 'Text' or 'HTML'")
+
+    if attachment_paths:
+        #When attachments are needed, use createReplyAll to produce a draft first,
+        #then attach files, then send the draft.
+        #POST /me/messages/{id}/createReplyAll returns a new draft message object.
+        create_endpoint = f'me/messages/{message_id}/createReplyAll'
+        json_data = {
+            "comment": comment
+        }
+        draft = make_graph_request(access_token, create_endpoint, method='POST', json_data=json_data)
+        draft_id = draft.get('id')
+
+        #Update the draft body content type if HTML was requested.
+        if body_type == 'HTML':
+            patch_endpoint = f'me/messages/{draft_id}'
+            patch_data = {
+                "body": {
+                    "contentType": body_type,
+                    "content": comment
+                }
+            }
+            make_graph_request(access_token, patch_endpoint, method='PATCH', json_data=patch_data)
+
+        #Add each attachment to the draft via POST /me/messages/{draft_id}/attachments
+        for attachment_path in attachment_paths:
+            if not os.path.exists(attachment_path):
+                raise FileNotFoundError(f"Attachment file '{attachment_path}' not found.")
+
+            filename = os.path.basename(attachment_path)
+
+            with open(attachment_path, 'rb') as file:
+                file_content = file.read()
+                encoded_content = base64.b64encode(file_content).decode('utf-8')
+
+            attachment = {
+                "@odata.type": "#microsoft.graph.fileAttachment",
+                "name": filename,
+                "contentBytes": encoded_content
+            }
+
+            attachment_endpoint = f'me/messages/{draft_id}/attachments'
+            make_graph_request(access_token, attachment_endpoint, method='POST', json_data=attachment)
+
+        #Send the draft via POST /me/messages/{draft_id}/send
+        send_endpoint = f'me/messages/{draft_id}/send'
+        make_graph_request(access_token, send_endpoint, method='POST')
+
+    else:
+        #No attachments - use the direct replyAll endpoint.
+        #POST /me/messages/{id}/replyAll sends to all recipients immediately.
+        reply_all_endpoint = f'me/messages/{message_id}/replyAll'
+        json_data = {
+            "comment": comment
+        }
+        make_graph_request(access_token, reply_all_endpoint, method='POST', json_data=json_data)
+
+    return {"status": "sent", "message": "Reply-all sent successfully"}
+
 #This function will download all attachments from a specific email message.
 def download_attachments(access_token, message_id, download_dir):
-    """
-    Download all attachments from a specific email message.
-
-    Args:
-        access_token: OAuth2 access token
-        message_id: The ID of the message to download attachments from
-        download_dir: Directory path to save attachments
-
-    Returns:
-        List of downloaded filenames
-    """
-
     #Ensure the download directory exists
     if not os.path.exists(download_dir):
         os.makedirs(download_dir)
@@ -652,8 +767,6 @@ def untrash_email_in_batch(access_token, message_ids, destination_folder='inbox'
     }
 
 #This function permanently deletes an email.
-#Uses DELETE /me/messages/{id} endpoint.
-#Note: In Microsoft Graph, DELETE performs a soft delete (moves to recoverableitemsdeletions).
 def delete_email(access_token, message_id):
     endpoint = f'me/messages/{message_id}'
 
@@ -829,7 +942,6 @@ def create_draft_email(access_token, to, subject, body, body_type='Text', cc=Non
     }
 
 #This function will list all draft email messages from the Drafts folder.
-#Uses GET /me/mailFolders/drafts/messages endpoint with pagination.
 def list_draft_email_messages(access_token, max_results=10):
     messages = []
     endpoint = 'me/mailFolders/drafts/messages'
@@ -869,7 +981,6 @@ def list_draft_email_messages(access_token, max_results=10):
     return messages[:max_results] if max_results else messages
 
 #This function will get the full details of a specific draft email by ID.
-#Uses GET /me/messages/{id} endpoint, same as regular email but filtered for drafts.
 def get_draft_email_details(access_token, draft_id):
     endpoint = f'me/messages/{draft_id}'
 
@@ -900,8 +1011,6 @@ def get_draft_email_details(access_token, draft_id):
     return draft_details
 
 #This function will send a draft email by its message ID.
-#Uses POST /me/messages/{id}/send endpoint.
-#The draft must already exist in the Drafts folder.
 def send_draft_email(access_token, draft_id):
     endpoint = f'me/messages/{draft_id}/send'
 
@@ -919,8 +1028,6 @@ def delete_draft_email(access_token, draft_id):
     return f'Draft {draft_id} deleted successfully.'
 
 #This function will update an existing draft email.
-#Uses PATCH /me/messages/{id} endpoint.
-#Only draft messages (isDraft = true) can have their subject, body, and recipients updated.
 def update_draft_email(access_token, draft_id, subject=None, body=None, body_type=None, to=None, cc=None, bcc=None):
     #Helper function to convert email string or list to Graph API recipient format
     def format_recipients(recipients):
