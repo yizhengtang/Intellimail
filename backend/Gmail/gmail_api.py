@@ -41,10 +41,9 @@ def extract_body(payload):
         body = base64.urlsafe_b64decode(payload['body']['data']).decode('utf-8')
     return body
 
-#Function to get email messages from Gmail API service, user_id represents the user account.
-#Returns summary-level data for each message (no body) suitable for rendering an inbox list view.
-#Uses messages.list to get IDs, then messages.get with format='full' + fields parameter to fetch
-#only the fields needed (subject, sender, date, snippet, labels, attachment info) without body content.
+#this function gets email messages from Gmail API service, user_id represents the user account.
+#Returns summary-level data for each messages.
+#uses format "full" and fields parameter to only fetch the necessary data.
 def get_email_messages(service, user_id='me', label_ids = None, folder_name = 'INBOX', max_results=5):
     #Use for pagination
     next_page_token = None
@@ -67,7 +66,7 @@ def get_email_messages(service, user_id='me', label_ids = None, folder_name = 'I
         else:
             raise ValueError(f'Folder name "{folder_name}" not found.')
 
-    #Step 1: Use messages.list to get message IDs only (this API only returns id + threadId).
+    #Use messages.list to get message IDs only, this API only returns id + threadId.
     while True:
         result = service.users().messages().list(
             userId=user_id,
@@ -84,10 +83,7 @@ def get_email_messages(service, user_id='me', label_ids = None, folder_name = 'I
 
     message_ids = message_ids[:max_results] if max_results else message_ids
 
-    #Step 2: Fetch summary metadata for each message using messages.get with format='full' and a
-    #fields mask. The fields parameter limits the API response to only the specified fields,
-    #so the body content (payload.body.data) is never transferred — keeping responses lightweight.
-    #Reference: https://developers.google.com/gmail/api/reference/rest/v1/users.messages/get
+    #Fetch summary metadata for each message using messages.get with format 'full' and fields parameter to limit the API response to only the specified fields
     messages = []
     for msg in message_ids:
         message = service.users().messages().get(
@@ -636,14 +632,11 @@ def create_draft_email(service, to, subject, body, body_type='plain', attachment
     return draft
     
 #This function will list all draft email messages with summary-level metadata.
-#Uses drafts.list to get draft IDs, then drafts.get with format='full' + fields parameter
-#to fetch subject, recipient, snippet, date, and attachment info — without body content.
-#Reference: https://developers.google.com/gmail/api/reference/rest/v1/users.drafts/list
 def list_draft_email_messages(service, user_id='me', max_results=5):
     draft_ids = []
     next_page_token = None
 
-    #Step 1: Get draft IDs via drafts.list (returns only id + message.id + message.threadId).
+    #Get draft IDs using .lists method.
     while True:
         result = service.users().drafts().list(
             userId=user_id,
@@ -659,8 +652,7 @@ def list_draft_email_messages(service, user_id='me', max_results=5):
 
     draft_ids = draft_ids[:max_results] if max_results else draft_ids
 
-    #Step 2: Fetch summary metadata for each draft using drafts.get with a fields mask.
-    #The fields mask limits the response to only headers, snippet, and attachment filenames.
+    #Fetch summary metadata for each draft using drafts.get with a fields mask.
     drafts = []
     for draft in draft_ids:
         draft_detail = service.users().drafts().get(
