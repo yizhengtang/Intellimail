@@ -1,4 +1,7 @@
+import os
 from fastapi import APIRouter, HTTPException, Query
+from pydantic import BaseModel
+from typing import List, Optional
 from Gmail.gmail_api import (
     initialize_gmail_service,
     get_email_messages,
@@ -9,6 +12,7 @@ from Gmail.gmail_api import (
     search_emails,
     search_email_conversations,
     get_email_conversations,
+    download_attachments,
     download_attachments_all,
     create_label,
     list_labels,
@@ -31,6 +35,8 @@ from Gmail.gmail_api import (
 
 router = APIRouter()
 
+DOWNLOADS_DIR = os.path.join(os.path.dirname(__file__), '..', '..', 'Gmail', 'downloads')
+
 
 def get_service():
     try:
@@ -39,18 +45,27 @@ def get_service():
         raise HTTPException(status_code=500, detail=f"Failed to initialize Gmail service: {e}")
 
 
-# ── Emails ──
+# Request body models
+
+class BatchMessageIdsRequest(BaseModel):
+    message_ids: List[str]
+
+class ModifyEmailLabelsRequest(BaseModel):
+    add_labels: Optional[List[str]] = None
+    remove_labels: Optional[List[str]] = None
+
+class UpdateLabelRequest(BaseModel):
+    name: Optional[str] = None
+    label_list_visibility: Optional[str] = None
+    message_list_visibility: Optional[str] = None
+
+
+# Emails
 
 @router.get("/emails")
 def list_emails(folder: str = "INBOX", max_results: int = 10):
     service = get_service()
     return get_email_messages(service, folder_name=folder, max_results=max_results)
-
-
-@router.get("/emails/{message_id}")
-def email_details(message_id: str):
-    service = get_service()
-    return get_email_message_details(service, message_id)
 
 
 @router.get("/emails/{message_id}/conversations")
@@ -59,7 +74,13 @@ def email_conversations(message_id: str):
     return get_email_conversations(service, message_id)
 
 
-# ── Search ──
+@router.get("/emails/{message_id}")
+def email_details(message_id: str):
+    service = get_service()
+    return get_email_message_details(service, message_id)
+
+
+# Search
 
 @router.get("/search")
 def search(query: str, max_results: int = 5):
@@ -73,7 +94,7 @@ def search_conversations(query: str, max_results: int = 5):
     return search_email_conversations(service, query, max_results=max_results)
 
 
-# ── Send / Reply ──
+# Send and reply
 
 @router.post("/send")
 def send_email(to: str, subject: str, body: str, body_type: str = "plain"):
@@ -93,7 +114,37 @@ def reply_all(message_id: str, body: str, body_type: str = "plain"):
     return reply_all_email(service, message_id, body, body_type=body_type)
 
 
-# ── Trash ──
+# Attachments
+
+@router.get("/emails/{message_id}/attachments/download")
+def download_email_attachments(message_id: str):
+    service = get_service()
+    os.makedirs(DOWNLOADS_DIR, exist_ok=True)
+    download_attachments(service, 'me', message_id, DOWNLOADS_DIR)
+    return {"message": "Attachments downloaded", "download_dir": DOWNLOADS_DIR}
+
+
+@router.get("/emails/{message_id}/attachments/download-all")
+def download_all_thread_attachments(message_id: str):
+    service = get_service()
+    os.makedirs(DOWNLOADS_DIR, exist_ok=True)
+    download_attachments_all(service, 'me', message_id, DOWNLOADS_DIR)
+    return {"message": "All thread attachments downloaded", "download_dir": DOWNLOADS_DIR}
+
+
+# Trash
+
+@router.post("/emails/trash/batch")
+def trash_batch(request: BatchMessageIdsRequest):
+    service = get_service()
+    return trash_email_in_batch(service, 'me', request.message_ids)
+
+
+@router.post("/emails/untrash/batch")
+def untrash_batch(request: BatchMessageIdsRequest):
+    service = get_service()
+    return untrash_email_in_batch(service, 'me', request.message_ids)
+
 
 @router.post("/emails/{message_id}/trash")
 def trash(message_id: str):
@@ -120,7 +171,7 @@ def empty_trash_endpoint():
     return {"total_deleted": total}
 
 
-# ── Labels ──
+# Labels
 
 @router.get("/labels")
 def get_labels():
@@ -140,13 +191,36 @@ def create_new_label(name: str):
     return create_label(service, name)
 
 
+@router.patch("/labels/{label_id}")
+def update_label(label_id: str, request: UpdateLabelRequest):
+    service = get_service()
+    updates = {}
+    if request.name is not None:
+        updates['name'] = request.name
+    if request.label_list_visibility is not None:
+        updates['labelListVisibility'] = request.label_list_visibility
+    if request.message_list_visibility is not None:
+        updates['messageListVisibility'] = request.message_list_visibility
+    if not updates:
+        raise HTTPException(status_code=400, detail="No fields provided to update.")
+    return modify_labels(service, label_id, **updates)
+
+
 @router.delete("/labels/{label_id}")
 def remove_label(label_id: str):
     service = get_service()
     return delete_label(service, label_id)
 
 
-# ── Drafts ──
+@router.post("/emails/{message_id}/labels")
+def update_email_labels(message_id: str, request: ModifyEmailLabelsRequest):
+    service = get_service()
+    return modify_email_labels(service, 'me', message_id,
+                               add_labels=request.add_labels,
+                               remove_labels=request.remove_labels)
+
+
+# Drafts
 
 @router.get("/drafts")
 def list_drafts(max_results: int = 10):
