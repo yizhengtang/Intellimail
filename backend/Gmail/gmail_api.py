@@ -42,12 +42,10 @@ def extract_body(payload):
     return body
 
 #Function to get email messages from Gmail API service, user_id represents the user account.
-#This function WILL ONLY fetch email_id and email thread ID.
 def get_email_messages(service, user_id='me', label_ids = None, folder_name = 'INBOX', max_results=5):
-    #Create a list to store email messages.
-    messages = []
     #Use for pagination
     next_page_token = None
+    message_ids = []
 
     #Checks if the provided folder name exists.
     if folder_name:
@@ -66,31 +64,58 @@ def get_email_messages(service, user_id='me', label_ids = None, folder_name = 'I
         else:
             raise ValueError(f'Folder name "{folder_name}" not found.')
 
-    #This while loop will continue fetching email messages until maximum results is reached or no more messages left.    
+    #Use messages.list to get message IDs only.
     while True:
-
-        #Messages list method to retrieve email messages from the user's inbox.
-        #Can fetch up to 500 messages per API call, so I limit the max results to 500.
-        #Store the result of the API call in a variable call result.  
         result = service.users().messages().list(
             userId=user_id,
             labelIds=label_ids,
             pageToken=next_page_token,
-            maxResults=min(500, max_results - len(messages)) if max_results else 500
+            maxResults=min(500, max_results - len(message_ids)) if max_results else 500
         ).execute()
 
-        #After the API call, extend the messages list with the retrieved messages from the result.
-        #Then update the next_page_token to get the next set of messages in the next iteration.
-        messages.extend(result.get('messages', []))
+        message_ids.extend(result.get('messages', []))
         next_page_token = result.get('nextPageToken')
-        
-        #Here is an if statement to break the loop if (1. No next page token 2. Reached the maximum number of messages specified)
-        if not next_page_token or (max_results and len(messages) >= max_results):
+
+        if not next_page_token or (max_results and len(message_ids) >= max_results):
             break
-    
-    #After the loop ends, return the messages list, slicing it to the specified max results.
-    #This ensures we return the exact number of messages requested even if we retrieve more due to the batching process.
-    return messages[:max_results] if max_results else messages   
+
+    message_ids = message_ids[:max_results] if max_results else message_ids
+
+    #Fetch summary metadata for each message using messages.get
+    messages = []
+    for msg in message_ids:
+        message = service.users().messages().get(
+            userId=user_id,
+            id=msg['id'],
+            format='full',
+            fields='id,threadId,labelIds,snippet,payload(headers,parts(filename,mimeType))'
+        ).execute()
+
+        headers = message.get('payload', {}).get('headers', [])
+        subject = next((h['value'] for h in headers if h['name'].lower() == 'subject'), 'No subject')
+        sender  = next((h['value'] for h in headers if h['name'].lower() == 'from'), 'Unknown sender')
+        date    = next((h['value'] for h in headers if h['name'].lower() == 'date'), 'No date available')
+
+        #UNREAD label present means the message is unread; absence means it has been read.
+        label_ids_msg = message.get('labelIds', [])
+        is_read = 'UNREAD' not in label_ids_msg
+
+        #Check for attachments by scanning parts for any entry with a non-empty filename.
+        parts = message.get('payload', {}).get('parts', [])
+        has_attachments = any(part.get('filename') for part in parts if part.get('filename'))
+
+        messages.append({
+            'id': msg['id'],
+            'thread_id': message.get('threadId', msg['id']),
+            'subject': subject,
+            'from': sender,
+            'snippet': message.get('snippet', ''),
+            'date': date,
+            'is_read': is_read,
+            'has_attachments': has_attachments,
+        })
+
+    return messages
   
 #This function will retrieve the full details of a specific email.
 #Takes in message_id as a parmeter to identify the email to fetch.
@@ -604,27 +629,61 @@ def create_draft_email(service, to, subject, body, body_type='plain', attachment
 
     return draft
     
-#This function will list all draft email messages.
-#Use while loop to fetch the draft emails in the draft folder using the drafts list method.
-#Breaks when mac results is reached or nextpagetoken returns none.
+#This function will list all draft email messages with summary-level metadata.
 def list_draft_email_messages(service, user_id='me', max_results=5):
-    drafts = []
+    draft_ids = []
     next_page_token = None
 
+    #Get draft IDs using draft.list.
     while True:
         result = service.users().drafts().list(
             userId=user_id,
             pageToken=next_page_token,
-            maxResults=min(500, max_results - len(drafts)) if max_results else 500
+            maxResults=min(500, max_results - len(draft_ids)) if max_results else 500
         ).execute()
 
-        drafts.extend(result.get('drafts', []))
+        draft_ids.extend(result.get('drafts', []))
         next_page_token = result.get('nextPageToken')
 
-        if not next_page_token or (max_results and len(drafts) >= max_results):
+        if not next_page_token or (max_results and len(draft_ids) >= max_results):
             break
 
-    return drafts[:max_results] if max_results else drafts
+    draft_ids = draft_ids[:max_results] if max_results else draft_ids
+
+    #Fetch summary metadata for each draft using drafts.get with a fields mask.
+    #The fields mask limits the response to only headers, snippet, and attachment filenames.
+    drafts = []
+    for draft in draft_ids:
+        draft_detail = service.users().drafts().get(
+            userId=user_id,
+            id=draft['id'],
+            format='full',
+            fields='id,message(id,threadId,snippet,payload(headers,parts(filename,mimeType)))'
+        ).execute()
+
+        message = draft_detail.get('message', {})
+        payload = message.get('payload', {})
+        headers = payload.get('headers', [])
+
+        subject   = next((h['value'] for h in headers if h['name'].lower() == 'subject'), 'No subject')
+        recipient = next((h['value'] for h in headers if h['name'].lower() == 'to'), 'No recipient')
+        date      = next((h['value'] for h in headers if h['name'].lower() == 'date'), 'No date available')
+
+        parts = payload.get('parts', [])
+        has_attachments = any(part.get('filename') for part in parts if part.get('filename'))
+
+        drafts.append({
+            'id': draft['id'],
+            'message_id': message.get('id', ''),
+            'thread_id': message.get('threadId', ''),
+            'subject': subject,
+            'to': recipient,
+            'snippet': message.get('snippet', ''),
+            'date': date,
+            'has_attachments': has_attachments,
+        })
+
+    return drafts
 
 #This function will get the detail of a specific draft email by ID.
 #Also pretty much same as the get email message details function, but instead this uses the drafts.get method to get the draft email details.
