@@ -83,15 +83,35 @@ def get_email_messages(service, user_id='me', label_ids = None, folder_name = 'I
 
     message_ids = message_ids[:max_results] if max_results else message_ids
 
-    #Fetch summary metadata for each message using messages.get with format 'full' and fields parameter to limit the API response to only the specified fields
+    #Fetch summary metadata for all messages in a single batch request instead of one API calls per message ID.
     messages = []
+    if not message_ids:
+        return messages
+
+    batch_results = {}
+
+    def handle_message(request_id, response, exception):
+        if exception is None:
+            batch_results[request_id] = response
+
+    batch = service.new_batch_http_request(callback=handle_message)
     for msg in message_ids:
-        message = service.users().messages().get(
-            userId=user_id,
-            id=msg['id'],
-            format='full',
-            fields='id,threadId,labelIds,snippet,payload(headers,parts(filename,mimeType))'
-        ).execute()
+        batch.add(
+            service.users().messages().get(
+                userId=user_id,
+                id=msg['id'],
+                format='full',
+                fields='id,threadId,labelIds,snippet,payload(headers,parts(filename,mimeType))'
+            ),
+            request_id=msg['id']
+        )
+    batch.execute()
+
+    #Process results in the original order returned by messages.list.
+    for msg in message_ids:
+        message = batch_results.get(msg['id'])
+        if not message:
+            continue
 
         headers = message.get('payload', {}).get('headers', [])
         subject = next((h['value'] for h in headers if h['name'].lower() == 'subject'), 'No subject')
@@ -652,15 +672,35 @@ def list_draft_email_messages(service, user_id='me', max_results=5):
 
     draft_ids = draft_ids[:max_results] if max_results else draft_ids
 
-    #Fetch summary metadata for each draft using drafts.get with a fields mask.
+    #Fetch summary metadata for all drafts in a single batch request instead of one api calls for each of the IDs in the list.
     drafts = []
+    if not draft_ids:
+        return drafts
+
+    batch_results = {}
+
+    def handle_draft(request_id, response, exception):
+        if exception is None:
+            batch_results[request_id] = response
+
+    batch = service.new_batch_http_request(callback=handle_draft)
     for draft in draft_ids:
-        draft_detail = service.users().drafts().get(
-            userId=user_id,
-            id=draft['id'],
-            format='full',
-            fields='id,message(id,threadId,snippet,payload(headers,parts(filename,mimeType)))'
-        ).execute()
+        batch.add(
+            service.users().drafts().get(
+                userId=user_id,
+                id=draft['id'],
+                format='full',
+                fields='id,message(id,threadId,snippet,payload(headers,parts(filename,mimeType)))'
+            ),
+            request_id=draft['id']
+        )
+    batch.execute()
+
+    #Process results in the original order returned by drafts.list.
+    for draft in draft_ids:
+        draft_detail = batch_results.get(draft['id'])
+        if not draft_detail:
+            continue
 
         message = draft_detail.get('message', {})
         payload = message.get('payload', {})
