@@ -444,31 +444,83 @@ def download_attachments_all(service, user_id, message_id, download_dir):
     for msg in messages:
         download_attachments(service, user_id, msg['id'], download_dir)
         
-#This function will try to look for individual emails.
+#This function will try to look for individual emails and return summary metadata for each result.
 def search_emails(service, query, user_id='me', max_results=5):
-    messages = []
+    message_stubs = []
     next_page_token = None
 
-    #THis while loop will continue fetching email messages until the maximum results is reached or no more messages left.
     while True:
         result = service.users().messages().list(
             userId=user_id,
             q=query,
             pageToken=next_page_token,
-            maxResults=min(500, max_results - len(messages)) if max_results else 500
+            maxResults=min(500, max_results - len(message_stubs)) if max_results else 500
         ).execute()
 
-        messages.extend(result.get('messages', []))
+        message_stubs.extend(result.get('messages', []))
         next_page_token = result.get('nextPageToken')
 
-        if not next_page_token or (max_results and len(messages) >= max_results):
+        if not next_page_token or (max_results and len(message_stubs) >= max_results):
             break
 
-    return messages[:max_results] if max_results else messages
+    message_stubs = message_stubs[:max_results] if max_results else message_stubs
 
-#This function will return the entire thread for emails that matches the query string.
+    if not message_stubs:
+        return []
+
+    #Batch-fetch metadata for all results in one HTTP round-trip.
+    batch_results = {}
+
+    def handle_message(request_id, response, exception):
+        if exception is None:
+            batch_results[request_id] = response
+
+    batch = service.new_batch_http_request(callback=handle_message)
+    for msg in message_stubs:
+        batch.add(
+            service.users().messages().get(
+                userId=user_id,
+                id=msg['id'],
+                format='full',
+                fields='id,threadId,labelIds,snippet,payload(headers,parts(filename,mimeType))'
+            ),
+            request_id=msg['id']
+        )
+    batch.execute()
+
+    messages = []
+    for msg in message_stubs:
+        message = batch_results.get(msg['id'])
+        if not message:
+            continue
+
+        headers = message.get('payload', {}).get('headers', [])
+        subject = next((h['value'] for h in headers if h['name'].lower() == 'subject'), 'No subject')
+        sender  = next((h['value'] for h in headers if h['name'].lower() == 'from'), 'Unknown sender')
+        date    = next((h['value'] for h in headers if h['name'].lower() == 'date'), 'No date available')
+
+        label_ids_msg = message.get('labelIds', [])
+        is_read = 'UNREAD' not in label_ids_msg
+
+        parts = message.get('payload', {}).get('parts', [])
+        has_attachments = any(part.get('filename') for part in parts if part.get('filename'))
+
+        messages.append({
+            'id': msg['id'],
+            'thread_id': message.get('threadId', msg['id']),
+            'subject': subject,
+            'from': sender,
+            'snippet': message.get('snippet', ''),
+            'date': date,
+            'is_read': is_read,
+            'has_attachments': has_attachments,
+        })
+
+    return messages
+
+#This function returns conversation threads matching the query with summary metadata for each thread.
 def search_email_conversations(service, query, user_id='me', max_results=5):
-    threads = []
+    thread_stubs = []
     next_page_token = None
 
     while True:
@@ -476,16 +528,81 @@ def search_email_conversations(service, query, user_id='me', max_results=5):
             userId=user_id,
             q=query,
             pageToken=next_page_token,
-            maxResults=min(500, max_results - len(threads)) if max_results else 500
+            maxResults=min(500, max_results - len(thread_stubs)) if max_results else 500
         ).execute()
 
-        threads.extend(result.get('threads', []))
+        thread_stubs.extend(result.get('threads', []))
         next_page_token = result.get('nextPageToken')
 
-        if not next_page_token or (max_results and len(threads) >= max_results):
+        if not next_page_token or (max_results and len(thread_stubs) >= max_results):
             break
 
-    return threads[:max_results] if max_results else threads
+    thread_stubs = thread_stubs[:max_results] if max_results else thread_stubs
+
+    if not thread_stubs:
+        return []
+
+    #Batch-fetch each thread's messages with a fields mask (headers + attachment filenames only, no body content).
+    batch_results = {}
+
+    def handle_thread(request_id, response, exception):
+        if exception is None:
+            batch_results[request_id] = response
+
+    batch = service.new_batch_http_request(callback=handle_thread)
+    for stub in thread_stubs:
+        batch.add(
+            service.users().threads().get(
+                userId=user_id,
+                id=stub['id'],
+                fields='id,messages(id,labelIds,snippet,payload(headers(name,value),parts(filename,mimeType)))'
+            ),
+            request_id=stub['id']
+        )
+    batch.execute()
+
+    threads = []
+    for stub in thread_stubs:
+        thread = batch_results.get(stub['id'])
+        if not thread:
+            continue
+
+        msgs = thread.get('messages', [])
+        if not msgs:
+            continue
+
+        first_msg = msgs[0]
+        last_msg  = msgs[-1]
+
+        def get_header(msg, name):
+            return next((h['value'] for h in msg.get('payload', {}).get('headers', []) if h['name'].lower() == name), '')
+
+        #Subject from first message; sender, date, snippet from most recent message.
+        subject = get_header(first_msg, 'subject') or 'No subject'
+        sender  = get_header(last_msg, 'from') or 'Unknown sender'
+        date    = get_header(last_msg, 'date') or 'No date available'
+
+        is_read = not any('UNREAD' in msg.get('labelIds', []) for msg in msgs)
+
+        has_attachments = any(
+            part.get('filename')
+            for msg in msgs
+            for part in msg.get('payload', {}).get('parts', [])
+            if part.get('filename')
+        )
+
+        threads.append({
+            'thread_id': thread['id'],
+            'subject': subject,
+            'from': sender,
+            'snippet': last_msg.get('snippet', ''),
+            'date': date,
+            'message_count': len(msgs),
+            'is_read': is_read,
+            'has_attachments': has_attachments,
+        })
+
+    return threads
 
 #This function will create a new label.
 def create_label(service, name, label_list_visibility='labelShow', message_list_visibility='show'):
