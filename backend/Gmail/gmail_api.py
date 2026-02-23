@@ -305,7 +305,7 @@ def reply_all_email(service, message_id, body, body_type='plain', attachment_pat
     if original_subject.lower().startswith('re:'):
         reply_subject = original_subject
     else:
-        f'Re: {original_subject}'
+        reply_subject = f'Re: {original_subject}'
 
     #Build References header
     references = f'{original_references} {original_message_id}'.strip() if original_message_id else original_references

@@ -44,7 +44,7 @@ def create_gmail_service(api_name, api_version, *scopes, prefix =''):
 
     #Creates token file that stores unique token for Gmail API services.
     creds = None
-    working_dir = os.getcwd()
+    working_dir = os.path.dirname(os.path.abspath(__file__))
     token_dir = 'token_files'
     token_file = f'token_{API_SERCE_NAME}_{API_VERSION}{prefix}.json'
 
