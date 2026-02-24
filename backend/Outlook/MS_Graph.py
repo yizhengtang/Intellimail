@@ -5,6 +5,8 @@ import msal
 
 MS_GRAPH_BASE_ENDPOINT = 'https://graph.microsoft.com/v1.0/'
 
+REFRESH_TOKEN_PATH = os.path.join(os.path.dirname(__file__), 'refresh_token.txt')
+
 #This function will handle the authentication process and return an access token for the Microsoft Graph API
 def get_access_token(app_id, client_secret, scopes):
     #ConfidentialClientApplication is used here since it is a web app where client secrets can be securely stored in.
@@ -16,8 +18,8 @@ def get_access_token(app_id, client_secret, scopes):
 
     #Check if there is a refresh token stored.
     refresh_token = None
-    if os.path.exists('refresh_token.txt'):
-        with open ('refresh_token.txt', 'r') as file:
+    if os.path.exists(REFRESH_TOKEN_PATH):
+        with open (REFRESH_TOKEN_PATH, 'r') as file:
             refresh_token = file.read().strip()
 
     if refresh_token:
@@ -36,7 +38,7 @@ def get_access_token(app_id, client_secret, scopes):
 
     if 'access_token' in token_response:
         if 'refresh_token' in token_response:
-            with open('refresh_token.txt', 'w') as file:
+            with open(REFRESH_TOKEN_PATH, 'w') as file:
                 file.write(token_response['refresh_token'])
             
         return token_response['access_token']

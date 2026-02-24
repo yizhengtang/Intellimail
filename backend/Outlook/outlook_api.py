@@ -55,7 +55,7 @@ def get_email_messages(access_token, folder_name='inbox', max_results=10):
     params = {
         #Maximum number of results to fetch
         '$top': min(50, max_results),
-        '$select': 'id,from,subject,receivedDateTime,isRead',
+        '$select': 'id,from,subject,receivedDateTime,isRead,hasAttachments,bodyPreview',
         '$orderby': 'receivedDateTime desc'
     }
 
@@ -70,8 +70,10 @@ def get_email_messages(access_token, folder_name='inbox', max_results=10):
                 'sender': msg.get('from', {}).get('emailAddress', {}).get('address', 'Unknown sender'),
                 'sender_name': msg.get('from', {}).get('emailAddress', {}).get('name', ''),
                 'subject': msg.get('subject', 'No subject'),
+                'snippet': msg.get('bodyPreview', ''),
                 'received_time': msg.get('receivedDateTime', 'No date available'),
-                'is_read': msg.get('isRead', False)
+                'is_read': msg.get('isRead', False),
+                'has_attachments': msg.get('hasAttachments', False)
             })
 
         #Check for next page
@@ -449,7 +451,7 @@ def search_emails(access_token, query, max_results=5):
     #Microsoft Graph API uses $search parameter for searching
     params = {
         '$search': f'"{query}"',
-        '$select': 'id,from,subject,receivedDateTime,isRead,hasAttachments',
+        '$select': 'id,from,subject,receivedDateTime,isRead,hasAttachments,bodyPreview',
         '$top': min(50, max_results) if max_results else 50
     }
 
@@ -464,6 +466,7 @@ def search_emails(access_token, query, max_results=5):
                 'sender': msg.get('from', {}).get('emailAddress', {}).get('address', 'Unknown sender'),
                 'sender_name': msg.get('from', {}).get('emailAddress', {}).get('name', ''),
                 'subject': msg.get('subject', 'No subject'),
+                'snippet': msg.get('bodyPreview', ''),
                 'received_time': msg.get('receivedDateTime', 'No date available'),
                 'is_read': msg.get('isRead', False),
                 'has_attachments': msg.get('hasAttachments', False)

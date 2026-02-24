@@ -4,7 +4,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'Outlook'))
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.routers import gmail
+from app.routers import gmail, outlook
 
 app = FastAPI(
     title="AI Inbox Manager",
@@ -23,6 +23,7 @@ app.add_middleware(
 
 # Routers
 app.include_router(gmail.router, prefix="/gmail", tags=["Gmail"])
+app.include_router(outlook.router, prefix="/outlook", tags=["Outlook"])
 
 @app.get("/")
 def root():
