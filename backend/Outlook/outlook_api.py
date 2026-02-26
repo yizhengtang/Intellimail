@@ -484,12 +484,13 @@ def search_emails(access_token, query, max_results=5):
     return messages[:max_results] if max_results else messages
 
 #This function will search for email conversations (threads) by query.
+#This is different from what I have in gmail, as microsoft graph doesnt have thread endpoint to get conversation, so my approach is to search messages and then group by conversation ID.
 def search_email_conversations(access_token, query, max_results=5):
     #Search messages first
     endpoint = 'me/messages'
     params = {
         '$search': f'"{query}"',
-        '$select': 'conversationId,subject,from,receivedDateTime',
+        '$select': 'conversationId,subject,from,receivedDateTime,isRead,hasAttachments,bodyPreview',
         '$top': 50
     }
 
@@ -503,27 +504,50 @@ def search_email_conversations(access_token, query, max_results=5):
 
         #Check if we need more messages
         next_link = result.get('@odata.nextLink')
-        if not next_link or len(all_messages) >= (max_results * 10):  # Fetch extra to find unique conversations
+        #Fetch extra to find unique conversations
+        if not next_link or len(all_messages) >= (max_results * 10): 
             break
 
         endpoint = next_link.replace(MS_GRAPH_BASE_ENDPOINT, '')
         params = None
 
-    #Group by conversationId to get unique conversations
+    #Group by conversationId and aggregate metadata from all messages in each conversation.
     conversations_dict = {}
     for msg in all_messages:
         conv_id = msg.get('conversationId')
-        if conv_id and conv_id not in conversations_dict:
+        if not conv_id:
+            continue
+
+        if conv_id not in conversations_dict:
             conversations_dict[conv_id] = {
                 'conversationId': conv_id,
                 'subject': msg.get('subject', 'No subject'),
-                'from': msg.get('from', {}).get('emailAddress', {}).get('address', 'Unknown'),
-                'from_name': msg.get('from', {}).get('emailAddress', {}).get('name', ''),
-                'received_time': msg.get('receivedDateTime', 'No date')
+                'messages': []
             }
 
-    #Convert to list and limit to max_results
-    conversations = list(conversations_dict.values())
+        conversations_dict[conv_id]['messages'].append(msg)
+
+    #Build the final result by aggregating each conversation's messages
+    conversations = []
+    for conv in conversations_dict.values():
+        msgs = conv['messages']
+
+        #Sort by receivedDateTime descending to get the most recent message first
+        msgs.sort(key=lambda m: m.get('receivedDateTime', ''), reverse=True)
+        latest = msgs[0]
+
+        conversations.append({
+            'conversationId': conv['conversationId'],
+            'subject': conv['subject'],
+            'from': latest.get('from', {}).get('emailAddress', {}).get('address', 'Unknown'),
+            'from_name': latest.get('from', {}).get('emailAddress', {}).get('name', ''),
+            'snippet': latest.get('bodyPreview', ''),
+            'received_time': latest.get('receivedDateTime', 'No date'),
+            'message_count': len(msgs),
+            'is_read': all(m.get('isRead', False) for m in msgs),
+            'has_attachments': any(m.get('hasAttachments', False) for m in msgs),
+        })
+
     return conversations[:max_results] if max_results else conversations
 
 #This function will mark an email as read.
@@ -704,7 +728,6 @@ def move_message_to_folder(access_token, message_id, destination_id):
     }
 
 #This function will trash a specific email by moving it to the Deleted Items folder.
-#Uses POST /me/messages/{id}/move with destinationId 'deleteditems'.
 def trash_email(access_token, message_id):
     endpoint = f'me/messages/{message_id}/move'
 
@@ -839,8 +862,7 @@ def get_email_conversations(access_token, message_id):
         '$top': 50
     }
 
-    #Use Prefer header to request plain text body instead of HTML
-    #By default Graph API returns HTML which includes raw tags in the response
+    #Use Prefer header to request plain text body instead of HTML, by defailt it returns HTML
     prefer_headers = {'Prefer': 'outlook.body-content-type="text"'}
 
     all_messages = []
@@ -857,10 +879,10 @@ def get_email_conversations(access_token, message_id):
         endpoint = next_link.replace(MS_GRAPH_BASE_ENDPOINT, '')
         params = None
 
-    #Sort by received time ascending (oldest first) to show conversation in chronological order
+    #Sort by oldest first.
     all_messages.sort(key=lambda x: x.get('receivedDateTime', ''))
 
-    #Process each message into a consistent format matching the Gmail version
+    #Process each message into a consistent format
     processed_messages = []
     for msg in all_messages:
         processed_messages.append({
