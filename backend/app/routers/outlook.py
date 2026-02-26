@@ -42,6 +42,20 @@ router = APIRouter()
 
 DOWNLOADS_DIR = os.path.join(os.path.dirname(__file__), '..', '..', 'Outlook', 'downloads')
 
+#Field mapping to normalize Outlook response keys to match Gmail's schema.
+#This keeps the service layer untouched while giving the frontend a consistent API.
+FIELD_REMAP = {
+    'sender': 'from',
+    'sender_name': 'from_name',
+    'received_time': 'date',
+}
+
+def normalize(messages):
+    normalized = []
+    for msg in messages:
+        normalized.append({FIELD_REMAP.get(k, k): v for k, v in msg.items()})
+    return normalized
+
 
 def get_token():
     try:
@@ -72,7 +86,7 @@ class UpdateDraftRequest(BaseModel):
 @router.get("/emails")
 def list_emails(folder: str = "inbox", max_results: int = 10):
     token = get_token()
-    return get_email_messages(token, folder_name=folder, max_results=max_results)
+    return normalize(get_email_messages(token, folder_name=folder, max_results=max_results))
 
 
 @router.get("/emails/{message_id}/conversations")
@@ -92,13 +106,13 @@ def email_details(message_id: str):
 @router.get("/search")
 def search(query: str, max_results: int = 5):
     token = get_token()
-    return search_emails(token, query, max_results=max_results)
+    return normalize(search_emails(token, query, max_results=max_results))
 
 
 @router.get("/search/conversations")
 def search_conversations(query: str, max_results: int = 5):
     token = get_token()
-    return search_email_conversations(token, query, max_results=max_results)
+    return normalize(search_email_conversations(token, query, max_results=max_results))
 
 
 #Send and reply
@@ -203,7 +217,7 @@ def empty_trash_endpoint():
 @router.get("/trash")
 def get_trash(max_results: int = 10):
     token = get_token()
-    return get_trash_messages(token, max_results=max_results)
+    return normalize(get_trash_messages(token, max_results=max_results))
 
 
 #Folders (same as gmail labels)
