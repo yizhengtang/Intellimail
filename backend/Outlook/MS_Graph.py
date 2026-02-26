@@ -5,12 +5,15 @@ import threading
 from urllib.parse import urlparse, parse_qs
 from http.server import HTTPServer, BaseHTTPRequestHandler
 import msal
+from dotenv import load_dotenv
+
+load_dotenv()
 
 MS_GRAPH_BASE_ENDPOINT = 'https://graph.microsoft.com/v1.0/'
 
 REFRESH_TOKEN_PATH = os.path.join(os.path.dirname(__file__), 'refresh_token.txt')
-REDIRECT_PORT = 8090
-REDIRECT_URI = f'http://localhost:{REDIRECT_PORT}'
+REDIRECT_URI = os.getenv('MICROSOFT_REDIRECT_URI')
+REDIRECT_PORT = int(REDIRECT_URI.split(':')[-1].rstrip('/')) if REDIRECT_URI else 8090
 
 
 #Temporary local HTTP server to capture the OAuth redirect callback automatically.
