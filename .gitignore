@@ -1,5 +1,6 @@
 venv/
 PROJECT_PLAN.md
+FRONTEND_PLAN.md
 
 ##Backend
 backend/.env
