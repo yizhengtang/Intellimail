@@ -18,9 +18,51 @@ export default function EmailPage() {
 
   const { email, loading, error } = useEmailDetail(provider || '', id || '');
 
+  const [isRead, setIsRead] = useState(true);
   const [thread, setThread] = useState<EmailDetailType[]>([]);
   const [threadLoading, setThreadLoading] = useState(true);
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
+
+  //Auto-mark as read when the email is opened and it is currently unread
+  useEffect(() => {
+    if (!email || !provider || !id) return;
+    if (email.is_read) {
+      setIsRead(true);
+      return;
+    }
+    setIsRead(false);
+
+    if (provider === 'gmail') {
+      gmailService.modifyEmailLabels(id, undefined, ['UNREAD']).then(() => setIsRead(true)).catch(() => {});
+    } else if (provider === 'outlook') {
+      outlookService.markAsRead(id).then(() => setIsRead(true)).catch(() => {});
+    }
+  }, [email, provider, id]);
+
+  //Toggle read/unread status
+  const handleToggleRead = async () => {
+    if (!provider || !id) return;
+
+    try {
+      if (isRead) {
+        if (provider === 'gmail') {
+          await gmailService.modifyEmailLabels(id, ['UNREAD']);
+        } else if (provider === 'outlook') {
+          await outlookService.markAsUnread(id);
+        }
+        setIsRead(false);
+      } else {
+        if (provider === 'gmail') {
+          await gmailService.modifyEmailLabels(id, undefined, ['UNREAD']);
+        } else if (provider === 'outlook') {
+          await outlookService.markAsRead(id);
+        }
+        setIsRead(true);
+      }
+    } catch {
+      //Toggle failed — state stays unchanged
+    }
+  };
 
   //Fetch the conversation thread for this email
   const fetchThread = useCallback(async () => {
@@ -68,7 +110,7 @@ export default function EmailPage() {
 
   return (
     <div>
-      <EmailDetail email={email} />
+      <EmailDetail email={email} isRead={isRead} onToggleRead={handleToggleRead} />
 
       {otherMessages.length > 0 && (
         <div style={{ padding: '0 24px 24px' }}>

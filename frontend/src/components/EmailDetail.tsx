@@ -1,5 +1,5 @@
 //EmailDetail.tsx
-//Renders the full detail view of a single email — headers, body, and attachment indicator.
+//Renders the full detail view of a single email — headers, body, attachment indicator, and read/unread toggle.
 
 //I decided to rename it to different name because the component is also called EmailDetail.
 import type { EmailDetail as EmailDetailType } from '../types/email';
@@ -7,14 +7,31 @@ import { formatDate } from '../utils/format';
 
 interface EmailDetailProps {
   email: EmailDetailType;
+  isRead: boolean;
+  onToggleRead: () => void;
 }
 
 //This component receives the full EmailDetail object and renders it.
 //The body is rendered as HTML or plain text depending on body_type.
-export default function EmailDetail({ email }: EmailDetailProps) {
+//The read/unread toggle button calls onToggleRead which is handled by the page.
+export default function EmailDetail({ email, isRead, onToggleRead }: EmailDetailProps) {
   return (
     <div style={{ padding: 24 }}>
-      <h2 style={{ marginBottom: 8 }}>{email.subject}</h2>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+        <h2 style={{ margin: 0 }}>{email.subject}</h2>
+        <button
+          onClick={onToggleRead}
+          style={{
+            padding: '6px 12px',
+            cursor: 'pointer',
+            border: '1px solid #ccc',
+            borderRadius: 4,
+            backgroundColor: 'transparent',
+          }}
+        >
+          {isRead ? 'Mark as unread' : 'Mark as read'}
+        </button>
+      </div>
 
       <div style={{ color: '#555', marginBottom: 16 }}>
         <div><strong>From:</strong> {email.from_name ? `${email.from_name} <${email.from}>` : email.from}</div>
