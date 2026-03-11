@@ -5,6 +5,7 @@ import { createBrowserRouter } from 'react-router-dom';
 import Layout from '../components/Layout';
 import InboxPage from '../pages/InboxPage';
 import EmailPage from '../pages/EmailPage';
+import ComposePage from '../pages/ComposePage';
 
 //there are three routes: 1. /inbox 2. /email/:provider/:id 3. /compose
 //the layout component wraps all routes to provide a consistent ui structure.
@@ -14,7 +15,7 @@ const router = createBrowserRouter([
     children: [
       { path: '/', element: <InboxPage /> },
       { path: '/email/:provider/:id', element: <EmailPage /> },
-      { path: '/compose', element: <div>Compose</div> },
+      { path: '/compose', element: <ComposePage /> },
     ],
   },
 ]);
