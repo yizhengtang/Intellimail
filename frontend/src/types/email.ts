@@ -77,6 +77,7 @@ export interface DraftSummary {
   to?: string;
   snippet?: string;
   date?: string;
+  provider?: Provider;  // Added client-side for unified view
 }
 
 //DraftDetail is the shape of a draft email when viewing the full details.

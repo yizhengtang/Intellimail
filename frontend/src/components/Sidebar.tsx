@@ -46,7 +46,7 @@ export default function Sidebar() {
       <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
         <Link to="/compose" style={{ padding: '8px 12px', textDecoration: 'none', color: '#333' }}>Compose</Link>
         <Link to="/" style={{ padding: '8px 12px', textDecoration: 'none', color: '#333' }}>Inbox</Link>
-        <Link to="/" style={{ padding: '8px 12px', textDecoration: 'none', color: '#888' }}>Drafts</Link>
+        <Link to="/drafts" style={{ padding: '8px 12px', textDecoration: 'none', color: '#333' }}>Drafts</Link>
         <Link to="/" style={{ padding: '8px 12px', textDecoration: 'none', color: '#888' }}>Sent</Link>
         <Link to="/" style={{ padding: '8px 12px', textDecoration: 'none', color: '#888' }}>Trash</Link>
       </div>
