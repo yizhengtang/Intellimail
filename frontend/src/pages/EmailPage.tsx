@@ -23,6 +23,12 @@ export default function EmailPage() {
   const [threadLoading, setThreadLoading] = useState(true);
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
 
+  //Reply state — tracks whether the reply form is visible, the mode, body text, and sending status
+  const [replyMode, setReplyMode] = useState<'reply' | 'reply-all' | null>(null);
+  const [replyBody, setReplyBody] = useState('');
+  const [replySending, setReplySending] = useState(false);
+  const [replyError, setReplyError] = useState<string | null>(null);
+
   //Auto-mark as read when the email is opened and it is currently unread
   useEffect(() => {
     if (!email || !provider || !id) return;
@@ -101,6 +107,39 @@ export default function EmailPage() {
     });
   };
 
+  //Send reply or reply-all using the correct service based on provider
+  const handleReplySend = async () => {
+    if (!provider || !id || !replyMode) return;
+    setReplySending(true);
+    setReplyError(null);
+
+    try {
+      const payload = { body: replyBody };
+
+      if (replyMode === 'reply') {
+        if (provider === 'gmail') {
+          await gmailService.replyEmail(id, payload);
+        } else {
+          await outlookService.replyEmail(id, payload);
+        }
+      } else {
+        if (provider === 'gmail') {
+          await gmailService.replyAllEmail(id, payload);
+        } else {
+          await outlookService.replyAllEmail(id, payload);
+        }
+      }
+
+      setReplyMode(null);
+      setReplyBody('');
+      fetchThread();
+    } catch (err) {
+      setReplyError(err instanceof Error ? err.message : 'Failed to send reply');
+    } finally {
+      setReplySending(false);
+    }
+  };
+
   if (loading) return <p>Loading...</p>;
   if (error) return <p>{error}</p>;
   if (!email) return <p>Email not found.</p>;
@@ -110,7 +149,58 @@ export default function EmailPage() {
 
   return (
     <div>
-      <EmailDetail email={email} isRead={isRead} onToggleRead={handleToggleRead} />
+      <EmailDetail
+        email={email}
+        isRead={isRead}
+        onToggleRead={handleToggleRead}
+        onReply={() => { setReplyMode('reply'); setReplyBody(''); setReplyError(null); }}
+        onReplyAll={() => { setReplyMode('reply-all'); setReplyBody(''); setReplyError(null); }}
+      />
+
+      {replyMode && (
+        <div style={{ padding: '0 24px 24px' }}>
+          <h4>{replyMode === 'reply' ? 'Reply' : 'Reply All'} to {email.from_name || email.from}</h4>
+
+          {replyError && <p style={{ color: 'red' }}>{replyError}</p>}
+
+          <textarea
+            placeholder="Write your reply..."
+            value={replyBody}
+            onChange={e => setReplyBody(e.target.value)}
+            rows={6}
+            style={{ width: '100%', padding: '8px 12px', boxSizing: 'border-box', resize: 'vertical', marginBottom: 8 }}
+          />
+
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button
+              onClick={handleReplySend}
+              disabled={replySending || !replyBody.trim()}
+              style={{
+                padding: '8px 16px',
+                cursor: replySending ? 'not-allowed' : 'pointer',
+                backgroundColor: '#2185d0',
+                color: 'white',
+                border: 'none',
+                borderRadius: 4,
+              }}
+            >
+              {replySending ? 'Sending...' : 'Send'}
+            </button>
+            <button
+              onClick={() => { setReplyMode(null); setReplyBody(''); setReplyError(null); }}
+              style={{
+                padding: '8px 16px',
+                cursor: 'pointer',
+                border: '1px solid #ccc',
+                borderRadius: 4,
+                backgroundColor: 'transparent',
+              }}
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
 
       {otherMessages.length > 0 && (
         <div style={{ padding: '0 24px 24px' }}>

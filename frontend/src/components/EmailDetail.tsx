@@ -9,12 +9,15 @@ interface EmailDetailProps {
   email: EmailDetailType;
   isRead: boolean;
   onToggleRead: () => void;
+  onReply: () => void;
+  onReplyAll: () => void;
 }
 
 //This component receives the full EmailDetail object and renders it.
 //The body is rendered as HTML or plain text depending on body_type.
 //The read/unread toggle button calls onToggleRead which is handled by the page.
-export default function EmailDetail({ email, isRead, onToggleRead }: EmailDetailProps) {
+//Reply and Reply All buttons call their callbacks — the page handles the logic.
+export default function EmailDetail({ email, isRead, onToggleRead, onReply, onReplyAll }: EmailDetailProps) {
   return (
     <div style={{ padding: 24 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
@@ -48,6 +51,34 @@ export default function EmailDetail({ email, isRead, onToggleRead }: EmailDetail
       ) : (
         <pre style={{ whiteSpace: 'pre-wrap', fontFamily: 'inherit' }}>{email.body}</pre>
       )}
+
+      <div style={{ marginTop: 16, display: 'flex', gap: 8 }}>
+        <button
+          onClick={onReply}
+          style={{
+            padding: '8px 16px',
+            cursor: 'pointer',
+            border: '1px solid #ccc',
+            borderRadius: 4,
+            backgroundColor: '#2185d0',
+            color: 'white',
+          }}
+        >
+          Reply
+        </button>
+        <button
+          onClick={onReplyAll}
+          style={{
+            padding: '8px 16px',
+            cursor: 'pointer',
+            border: '1px solid #ccc',
+            borderRadius: 4,
+            backgroundColor: 'transparent',
+          }}
+        >
+          Reply All
+        </button>
+      </div>
     </div>
   );
 }

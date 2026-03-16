@@ -30,7 +30,7 @@ def make_graph_request(access_token, endpoint, method='GET', params=None, json_d
 
     url = f'{MS_GRAPH_BASE_ENDPOINT}{endpoint}'
 
-    with httpx.Client() as client:
+    with httpx.Client(timeout=30.0) as client:
         if method == 'GET':
             response = client.get(url, headers=headers, params=params)
         elif method == 'POST':
