@@ -1,18 +1,23 @@
 //Sidebar.tsx
-//Navigation sidebar — provider switcher and folder navigation links.
+//Navigation sidebar — provider switcher, compose link, and dynamic folder list.
 
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { useProvider } from '../context/ProviderContext';
+import { useFolders } from '../hooks/useFolders';
 import type { Provider } from '../types/email';
 
-//The sidebar has two sections:
+//The sidebar has three sections:
 //1. Provider switcher — three buttons that change the active email provider.
-//   When clicked, setProvider() updates the context, which causes useEmails
-//   to re-fetch because its useEffect depends on the provider value.
-//2. Nav links — navigate to different views. All point to / for now.
-//   Folder-based filtering will be wired in commit 20.
+//2. Compose link — navigates to the compose page.
+//3. Folder list — dynamically fetched from the active provider.
+//   Gmail returns "labels" (INBOX, SENT, TRASH, etc.).
+//   Outlook returns "folders" (Inbox, Sent Items, Deleted Items, etc.).
+//   Clicking a folder navigates to /?folder=<folderId> which InboxPage reads.
 export default function Sidebar() {
   const { provider, setProvider } = useProvider();
+  const { folders, loading } = useFolders();
+  const [searchParams] = useSearchParams();
+  const activeFolder = searchParams.get('folder') || '';
 
   const providers: { label: string; value: Provider }[] = [
     { label: 'Gmail', value: 'gmail' },
@@ -42,14 +47,78 @@ export default function Sidebar() {
         ))}
       </div>
 
-      <h4 style={{ marginTop: 24 }}>Navigation</h4>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-        <Link to="/compose" style={{ padding: '8px 12px', textDecoration: 'none', color: '#333' }}>Compose</Link>
-        <Link to="/" style={{ padding: '8px 12px', textDecoration: 'none', color: '#333' }}>Inbox</Link>
-        <Link to="/drafts" style={{ padding: '8px 12px', textDecoration: 'none', color: '#333' }}>Drafts</Link>
-        <Link to="/" style={{ padding: '8px 12px', textDecoration: 'none', color: '#888' }}>Sent</Link>
-        <Link to="/" style={{ padding: '8px 12px', textDecoration: 'none', color: '#888' }}>Trash</Link>
+      <div style={{ marginTop: 24 }}>
+        <Link
+          to="/compose"
+          style={{
+            display: 'block',
+            padding: '8px 12px',
+            textDecoration: 'none',
+            color: 'white',
+            backgroundColor: '#2185d0',
+            borderRadius: 4,
+            textAlign: 'center',
+          }}
+        >
+          Compose
+        </Link>
       </div>
+
+      <h4 style={{ marginTop: 24 }}>Folders</h4>
+      {loading ? (
+        <p style={{ color: '#888', fontSize: 14 }}>Loading...</p>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+          <Link
+            to="/"
+            style={{
+              padding: '6px 12px',
+              textDecoration: 'none',
+              color: !activeFolder ? '#333' : '#888',
+              fontWeight: !activeFolder ? 'bold' : 'normal',
+              fontSize: 14,
+            }}
+          >
+            All Mail
+          </Link>
+          <Link
+            to="/drafts"
+            style={{
+              padding: '6px 12px',
+              textDecoration: 'none',
+              color: '#888',
+              fontSize: 14,
+            }}
+          >
+            Drafts
+          </Link>
+          {folders.map(folder => (
+            <Link
+              key={`${folder.provider}-${folder.id}`}
+              to={`/?folder=${encodeURIComponent(folder.name)}`}
+              style={{
+                padding: '6px 12px',
+                textDecoration: 'none',
+                color: activeFolder === folder.name ? '#333' : '#888',
+                fontWeight: activeFolder === folder.name ? 'bold' : 'normal',
+                fontSize: 14,
+              }}
+            >
+              {folder.name}
+              {provider === 'unified' && folder.provider && (
+                <span style={{ color: '#bbb', marginLeft: 4, fontSize: 12 }}>
+                  ({folder.provider})
+                </span>
+              )}
+              {folder.unread_count !== undefined && folder.unread_count > 0 && (
+                <span style={{ color: '#2185d0', marginLeft: 4, fontSize: 12 }}>
+                  {folder.unread_count}
+                </span>
+              )}
+            </Link>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

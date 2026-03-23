@@ -6,14 +6,16 @@ import { useEmails } from '../hooks/useEmails';
 import { useSearch } from '../hooks/useSearch';
 import EmailList from '../components/EmailList';
 
-//This page reads the ?q= search param from the URL.
-//If a query is present, it uses useSearch to fetch matching emails.
-//Otherwise, it uses useEmails to fetch the normal inbox.
+//This page reads two URL search params:
+//  ?q=     — search query (shows search results instead of normal inbox)
+//  ?folder= — folder/label ID (filters emails by that folder)
+//Both can be combined: searching within a specific folder.
 export default function InboxPage() {
   const [searchParams] = useSearchParams();
   const query = searchParams.get('q') || '';
+  const folder = searchParams.get('folder') || undefined;
 
-  const inbox = useEmails();
+  const inbox = useEmails(folder);
   const search = useSearch(query);
 
   const isSearching = query.length > 0;
