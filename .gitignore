@@ -5,6 +5,7 @@ FRONTEND_PLAN.md
 
 ##Backend
 backend/.env
+backend/ai/chroma_db/
 backend/Gmail/token_files/
 backend/Gmail/attachments/
 backend/Gmail/downloads/
