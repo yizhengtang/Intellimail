@@ -79,3 +79,25 @@ def extract_events(email_text: str) -> list[dict]:
     )
     result = json.loads(response.choices[0].message.content)
     return result.get("events", [])
+
+#Reply Generation
+
+#Generates a draft reply to an email using GPT-4o-mini.
+#RAG is used — past emails from the same sender are retrieved to match tone and writing style.
+#context is pre-formatted by retrieve_context() in retrieval.py and passed in by the router.
+#temperature=0.3 allows natural language variation — a reply should feel human, not mechanically repetitive.
+#Returns the draft reply as a plain string ready to be loaded into the compose form.
+def generate_reply(email_text: str, context: str = "") -> str:
+    user_message = f"Draft a reply to the following email.\n\n<email>\n{email_text}\n</email>"
+    if context:
+        user_message += f"\n\nUse the following past emails to match the tone and writing style of the replies:\n\n<context>\n{context}\n</context>"
+    response = _client.chat.completions.create(
+        model="gpt-4o-mini",
+        messages=[
+            {"role": "system", "content": "You are an email reply assistant. Draft a professional and concise reply to the email. If context from past emails is provided, match the tone and writing style. Only reply to what was asked — do not add unnecessary content."},
+            {"role": "user", "content": user_message}
+        ],
+        temperature=0.3,
+        max_tokens=300
+    )
+    return response.choices[0].message.content.strip()
