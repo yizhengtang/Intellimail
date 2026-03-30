@@ -34,3 +34,26 @@ def summarize_email(email_text: str, context: str = "") -> str:
         max_tokens=150
     )
     return response.choices[0].message.content.strip()
+
+#Categorisation
+
+#Builds the user message for the categorisation prompt.
+#No context block — the category is determined from the email content alone, no RAG needed.
+def _build_categorise_prompt(email_text: str) -> str:
+    return f"Categorise the following email.\n\n<email>\n{email_text}\n</email>"
+
+#Categorises an email into one of six fixed categories using GPT-4o-mini.
+#RAG is not used — the category is self-contained in the email content.
+#max_tokens=10 is tight on purpose — we expect exactly one word back.
+#.strip().lower() normalises the response in case the model returns "Work" or "WORK".
+def categorize_email(email_text: str) -> str:
+    response = _client.chat.completions.create(
+        model="gpt-4o-mini",
+        messages=[
+            {"role": "system", "content": "You are an email categorisation assistant. Categorise the email into exactly one of these categories: work, personal, promotions, updates, urgent, spam, other. Reply with the category name only. No explanation."},
+            {"role": "user", "content": _build_categorise_prompt(email_text)}
+        ],
+        temperature=0,
+        max_tokens=10
+    )
+    return response.choices[0].message.content.strip().lower()
