@@ -101,3 +101,46 @@ def generate_reply(email_text: str, context: str = "") -> str:
         max_tokens=300
     )
     return response.choices[0].message.content.strip()
+
+#Priority Scoring
+
+#Scores the urgency of an email on a scale of 1 to 5 using GPT-4o-mini.
+#RAG is used — past emails from the same sender help identify urgency patterns.
+#Fallback score is 3 (normal) — safer than marking everything urgent or low priority.
+#response_format={"type": "json_object"} guarantees valid JSON output.
+def score_priority(email_text: str, context: str = "") -> dict:
+    user_message = f"Score the priority of the following email.\n\n<email>\n{email_text}\n</email>"
+    if context:
+        user_message += f"\n\nUse the following past emails from the same sender as context:\n\n<context>\n{context}\n</context>"
+    response = _client.chat.completions.create(
+        model="gpt-4o-mini",
+        messages=[
+            {"role": "system", "content": "You are an email priority scoring assistant. Score the urgency of the email on a scale of 1 to 5 using these criteria: 5 = urgent, immediate action required; 4 = high priority, action needed soon; 3 = normal, action needed but not time-sensitive; 2 = low priority, informational only; 1 = no action needed, promotional or newsletter. Return a JSON object with: score (integer 1–5), reason (one sentence explaining the score)."},
+            {"role": "user", "content": user_message}
+        ],
+        temperature=0,
+        max_tokens=100,
+        response_format={"type": "json_object"}
+    )
+    result = json.loads(response.choices[0].message.content)
+    return {"score": result.get("score", 3), "reason": result.get("reason", "")}
+
+#Spam Detection
+
+#Detects whether an email is spam or unwanted promotional content using GPT-4o-mini.
+#RAG is not used — spam detection is based on patterns in the current email alone.
+#Fallback is_spam=False — safer to leave a spam email in the inbox than to hide a real one.
+#response_format={"type": "json_object"} guarantees valid JSON output.
+def is_spam(email_text: str) -> dict:
+    response = _client.chat.completions.create(
+        model="gpt-4o-mini",
+        messages=[
+            {"role": "system", "content": "You are a spam detection assistant. Determine whether the email is spam or unwanted promotional content. Consider as spam: mass marketing, phishing attempts, unsolicited newsletters, prize or lottery scams, and bulk promotional emails. Do not consider as spam: personal emails, work emails, and relevant transactional emails. Return a JSON object with: is_spam (boolean), confidence (float between 0.0 and 1.0)."},
+            {"role": "user", "content": f"Determine if the following email is spam.\n\n<email>\n{email_text}\n</email>"}
+        ],
+        temperature=0,
+        max_tokens=50,
+        response_format={"type": "json_object"}
+    )
+    result = json.loads(response.choices[0].message.content)
+    return {"is_spam": result.get("is_spam", False), "confidence": result.get("confidence", 0.0)}
