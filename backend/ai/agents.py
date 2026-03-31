@@ -125,6 +125,61 @@ def score_priority(email_text: str, context: str = "") -> dict:
     result = json.loads(response.choices[0].message.content)
     return {"score": result.get("score", 3), "reason": result.get("reason", "")}
 
+#Batch Summarisation
+
+#Summarises multiple emails in a single GPT call — used by the chat agent for summarize_inbox.
+#Receives a list of email dicts returned by get_latest_emails() in vector_store.py.
+#Each dict has a "document" key (the full indexed text) and metadata keys (subject, from, date).
+#One GPT call for all emails is cheaper and faster than calling summarize_email() per email.
+def batch_summarize(emails: list[dict]) -> str:
+    if not emails:
+        return "No emails found in your knowledge base. Please sync your inbox first."
+
+    blocks = []
+    for i, email in enumerate(emails, start=1):
+        subject = email.get("subject", "No subject")
+        sender = email.get("from", "Unknown")
+        date = email.get("date", "")
+        text = email.get("document", "")
+        blocks.append(f"Email {i}:\nFrom: {sender} | Date: {date} | Subject: {subject}\n{text[:500]}")
+
+    combined = "\n\n".join(blocks)
+    response = _client.chat.completions.create(
+        model="gpt-4o-mini",
+        messages=[
+            {"role": "system", "content": "You are an inbox summarisation assistant. Summarise each email in 1 to 2 sentences. Present them as a numbered list. Be concise and professional."},
+            {"role": "user", "content": f"Summarise the following emails:\n\n{combined}"}
+        ],
+        temperature=0,
+        max_tokens=600
+    )
+    return response.choices[0].message.content.strip()
+
+#Context-Aware Answer
+
+#Answers a user's question using retrieved email context from ChromaDB.
+#Used by the chat agent for find_email and general_question intents.
+#history is the recent conversation — passed so the answer can reference prior turns.
+#temperature=0.3 allows natural variation — answers should feel conversational, not robotic.
+def answer_with_context(message: str, context: str, history: list[dict]) -> str:
+    user_message = message
+    if context:
+        user_message += f"\n\nRelevant emails from your inbox:\n\n{context}"
+    else:
+        user_message += "\n\nNo relevant emails were found in your inbox for this query."
+
+    messages = [{"role": "system", "content": "You are a professional personal inbox assistant. Answer questions about the user's emails accurately and concisely. Only use information from the provided email context. If the context does not contain enough information to answer, say so clearly."}]
+    messages += history
+    messages.append({"role": "user", "content": user_message})
+
+    response = _client.chat.completions.create(
+        model="gpt-4o-mini",
+        messages=messages,
+        temperature=0.3,
+        max_tokens=400
+    )
+    return response.choices[0].message.content.strip()
+
 #Spam Detection
 
 #Detects whether an email is spam or unwanted promotional content using GPT-4o-mini.

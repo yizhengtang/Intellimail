@@ -1,6 +1,7 @@
 #ingestion.py
 #Converts email dicts into clean text, embeds them, and stores them in the vector store.
 
+import datetime
 from bs4 import BeautifulSoup
 from .embeddings import embed_text
 from .vector_store import add_email
@@ -36,6 +37,7 @@ def ingest_email(email: dict, provider: str) -> bool:
         "message_type": "email",
         "from": email.get("from", ""),
         "date": email.get("date", ""),
+        "timestamp": int(datetime.datetime.now().timestamp()),
         "thread_id": thread_id,
         "subject": email.get("subject", "")
     }

@@ -35,6 +35,27 @@ def add_email(email_id: str, text: str, embedding: list[float], metadata: dict) 
         metadatas=[metadata]
     )
 
+#Returns the k most recently ingested emails from the vector store, sorted by timestamp.
+#ChromaDB has no native sort, so all documents are fetched and sorted in Python.
+#Pass provider to restrict results to a single provider — e.g. "gmail" or "outlook".
+def get_latest_emails(k: int = 10, provider: str | None = None) -> list[dict]:
+    collection = get_collection()
+    params = {"include": ["documents", "metadatas"]}
+    if provider:
+        params["where"] = {"provider": provider}
+    results = collection.get(**params)
+
+    documents = results.get("documents") or []
+    metadatas = results.get("metadatas") or []
+
+    if not documents:
+        return []
+
+    #Pair each document text with its metadata dict, then sort newest-first by timestamp.
+    paired = [{"document": doc, **meta} for doc, meta in zip(documents, metadatas)]
+    paired.sort(key=lambda x: x.get("timestamp", 0), reverse=True)
+    return paired[:k]
+
 #Returns the k most semantically similar stored emails to a query embedding.
 #Pass a where dict to restrict results by provider, message_type, or any other metadata field.
 def query_similar(query_embedding: list[float], k: int = 3, where: dict | None = None) -> dict:
