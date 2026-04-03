@@ -62,6 +62,21 @@ export default function Sidebar() {
         >
           Compose
         </Link>
+        <Link
+          to="/chat"
+          style={{
+            display: 'block',
+            padding: '8px 12px',
+            textDecoration: 'none',
+            color: '#333',
+            border: '1px solid #ccc',
+            borderRadius: 4,
+            textAlign: 'center',
+            marginTop: 8,
+          }}
+        >
+          AI Chat
+        </Link>
       </div>
 
       <h4 style={{ marginTop: 24 }}>Folders</h4>

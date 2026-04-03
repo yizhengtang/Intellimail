@@ -7,8 +7,9 @@ import InboxPage from '../pages/InboxPage';
 import EmailPage from '../pages/EmailPage';
 import ComposePage from '../pages/ComposePage';
 import DraftsPage from '../pages/DraftsPage';
+import ChatPage from '../pages/ChatPage';
 
-//there are four routes: 1. / (inbox) 2. /email/:provider/:id 3. /compose 4. /drafts
+//there are five routes: 1. / (inbox) 2. /email/:provider/:id 3. /compose 4. /drafts 5. /chat
 //the layout component wraps all routes to provide a consistent ui structure.
 const router = createBrowserRouter([
   {
@@ -18,6 +19,7 @@ const router = createBrowserRouter([
       { path: '/email/:provider/:id', element: <EmailPage /> },
       { path: '/compose', element: <ComposePage /> },
       { path: '/drafts', element: <DraftsPage /> },
+      { path: '/chat', element: <ChatPage /> },
     ],
   },
 ]);
