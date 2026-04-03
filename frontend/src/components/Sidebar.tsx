@@ -77,6 +77,21 @@ export default function Sidebar() {
         >
           AI Chat
         </Link>
+        <Link
+          to="/sync"
+          style={{
+            display: 'block',
+            padding: '8px 12px',
+            textDecoration: 'none',
+            color: '#333',
+            border: '1px solid #ccc',
+            borderRadius: 4,
+            textAlign: 'center',
+            marginTop: 8,
+          }}
+        >
+          Sync Inbox
+        </Link>
       </div>
 
       <h4 style={{ marginTop: 24 }}>Folders</h4>
