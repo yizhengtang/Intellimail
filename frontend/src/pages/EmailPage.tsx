@@ -6,6 +6,7 @@ import { useParams } from 'react-router-dom';
 import type { EmailDetail as EmailDetailType } from '../types/email';
 import { useEmailDetail } from '../hooks/useEmailDetail';
 import EmailDetail from '../components/EmailDetail';
+import AiPanel from '../components/AiPanel';
 import { formatDate } from '../utils/format';
 import * as gmailService from '../services/gmailService';
 import * as outlookService from '../services/outlookService';
@@ -156,6 +157,8 @@ export default function EmailPage() {
         onReply={() => { setReplyMode('reply'); setReplyBody(''); setReplyError(null); }}
         onReplyAll={() => { setReplyMode('reply-all'); setReplyBody(''); setReplyError(null); }}
       />
+
+      <AiPanel provider={provider || ''} messageId={id || ''} />
 
       {replyMode && (
         <div style={{ padding: '0 24px 24px' }}>
