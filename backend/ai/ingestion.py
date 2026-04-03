@@ -4,7 +4,7 @@
 import datetime
 from bs4 import BeautifulSoup
 from .embeddings import embed_text
-from .vector_store import add_email
+from .vector_store import add_email, email_exists
 
 #Extracts clean embeddable text from an email dict.
 #Strips HTML tags if body_type is "html" — Outlook emails can return HTML bodies.
@@ -22,9 +22,12 @@ def extract_text(email: dict) -> str:
     return text[:8000]
 
 #Embeds one email and stores it in the vector store.
-#Returns True if stored, False if skipped due to empty text.
+#Returns True if stored, False if skipped (already indexed or empty text).
 #Gmail uses thread_id, Outlook uses conversation_id — both are stored as thread_id in metadata.
 def ingest_email(email: dict, provider: str) -> bool:
+    if email_exists(email["id"]):
+        return False
+
     text = extract_text(email)
     if not text.strip():
         return False

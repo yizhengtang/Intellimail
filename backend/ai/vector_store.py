@@ -24,6 +24,13 @@ def get_collection() -> Collection:
         configuration={"hnsw": {"space": "cosine"}}
     )
 
+#Returns True if an email with this ID is already stored in the collection.
+#Used by ingest_email() to skip re-embedding emails that haven't changed.
+def email_exists(email_id: str) -> bool:
+    collection = get_collection()
+    result = collection.get(ids=[email_id])
+    return len(result["ids"]) > 0
+
 #Inserts or updates one email in the vector store.
 #upsert is used so re-indexing an already-stored email updates it instead of raising an error.
 def add_email(email_id: str, text: str, embedding: list[float], metadata: dict) -> None:
