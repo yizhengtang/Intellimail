@@ -4,7 +4,7 @@
 import { Link, useSearchParams } from 'react-router-dom';
 import { useProvider } from '../context/ProviderContext';
 import { useFolders } from '../hooks/useFolders';
-import type { Provider } from '../types/email';
+import type { EmailViewMode } from '../types/email';
 
 //The sidebar has three sections:
 //1. Provider switcher — three buttons that change the active email provider.
@@ -19,7 +19,7 @@ export default function Sidebar() {
   const [searchParams] = useSearchParams();
   const activeFolder = searchParams.get('folder') || '';
 
-  const providers: { label: string; value: Provider }[] = [
+  const providers: { label: string; value: EmailViewMode }[] = [
     { label: 'Gmail', value: 'gmail' },
     { label: 'Outlook', value: 'outlook' },
     { label: 'All', value: 'unified' },

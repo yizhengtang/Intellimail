@@ -1,5 +1,11 @@
-// Provider type — represents which email service is active
-export type Provider = 'gmail' | 'outlook' | 'unified';
+import type { Provider } from './provider';
+
+//EmailViewMode controls which view is active in the email section of the app.
+//'unified' shows Gmail and Outlook together — it is not a provider, it is a view mode.
+//This is distinct from Provider (types/provider.ts) which identifies actual connected platforms.
+export type EmailViewMode = 'gmail' | 'outlook' | 'unified';
+
+export type { Provider };
 
 //EmailSummary will return a list of emails from the /emails endpoint.
 //Both Gmail and Outlook return this same shape from the API
