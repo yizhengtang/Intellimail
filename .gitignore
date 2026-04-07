@@ -1,7 +1,5 @@
 venv/
-PROJECT_PLAN.md
-FRONTEND_PLAN.md
-AI_PLAN.md
+*.md
 .claude/
 
 ##Backend
