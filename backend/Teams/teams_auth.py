@@ -20,8 +20,6 @@ REFRESH_TOKEN_PATH = os.path.join(os.path.dirname(__file__), 'refresh_token.txt'
 REDIRECT_URI = os.getenv('MICROSOFT_REDIRECT_URI')
 REDIRECT_PORT = int(REDIRECT_URI.split(':')[-1].rstrip('/')) if REDIRECT_URI else 8090
 
-TEAMS_SCOPES = ['Chat.ReadWrite', 'Team.ReadBasic.All']
-
 
 #Temporary local HTTP server to capture the OAuth redirect callback automatically.
 class _OAuthCallbackHandler(BaseHTTPRequestHandler):
@@ -89,14 +87,3 @@ def get_access_token(app_id, client_secret, scopes):
         return token_response['access_token']
     else:
         raise Exception("Failed to acquire Teams access token: " + str(token_response))
-
-
-#Public entry point called by teams_api.py to get a valid access token.
-def initialize_teams_service():
-    app_id = os.getenv('MICROSOFT_CLIENT_ID')
-    client_secret = os.getenv('MICROSOFT_CLIENT_SECRET')
-
-    if not app_id or not client_secret:
-        raise ValueError("MICROSOFT_CLIENT_ID or MICROSOFT_CLIENT_SECRET not found in environment variables.")
-
-    return get_access_token(app_id, client_secret, TEAMS_SCOPES)
