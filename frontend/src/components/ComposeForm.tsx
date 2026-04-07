@@ -2,12 +2,12 @@
 //Reusable email compose form — To, Subject, Body fields with a provider selector.
 
 import { useState } from 'react';
-import type { Provider } from '../types/email';
+import type { EmailViewMode } from '../types/email';
 
 interface ComposeFormProps {
-  defaultProvider: Provider;
+  defaultProvider: EmailViewMode;
   sending: boolean;
-  onSend: (data: { to: string; subject: string; body: string; provider: Provider }) => void;
+  onSend: (data: { to: string; subject: string; body: string; provider: EmailViewMode }) => void;
 }
 
 //This component manages its own form state (to, subject, body, provider).
@@ -15,7 +15,7 @@ export default function ComposeForm({ defaultProvider, sending, onSend }: Compos
   const [to, setTo] = useState('');
   const [subject, setSubject] = useState('');
   const [body, setBody] = useState('');
-  const [provider, setProvider] = useState<Provider>(
+  const [provider, setProvider] = useState<EmailViewMode>(
     defaultProvider === 'unified' ? 'gmail' : defaultProvider
   );
 
@@ -27,7 +27,7 @@ export default function ComposeForm({ defaultProvider, sending, onSend }: Compos
         <label>Send from: </label>
         <select
           value={provider}
-          onChange={e => setProvider(e.target.value as Provider)}
+          onChange={e => setProvider(e.target.value as EmailViewMode)}
           style={{ padding: '6px 8px' }}
         >
           <option value="gmail">Gmail</option>
