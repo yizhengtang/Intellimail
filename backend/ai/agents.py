@@ -1,6 +1,6 @@
 #agents.py
-#All AI agents — summarise, categorise, extract events, generate replies, score priority, and detect spam.
-#Each agent takes clean email text and an optional RAG context string, calls GPT-4o-mini, and returns structured output.
+#All AI agents — summarise, categorise, extract events, generate replies, score priority, detect spam, and summarise chats.
+#Each agent takes clean text and an optional RAG context string, calls GPT-4o-mini, and returns structured output.
 #The router (ai.py) is responsible for calling retrieve_context() and passing the result in as context.
 
 import os
@@ -33,6 +33,27 @@ def summarize_email(email_text: str, context: str = "") -> str:
         ],
         temperature=0,
         max_tokens=150
+    )
+    return response.choices[0].message.content.strip()
+
+#Chat Summarisation
+
+#Summarises a full Teams chat thread accurately without missing or adding any information.
+#Unlike email summarisation (2–3 sentences), chat summarisation must cover the full conversation flow.
+#max_tokens=300 gives enough room for multi-turn conversations with several topics.
+#temperature=0 keeps the output deterministic — summarisation is a factual task, not a creative one.
+def summarize_chat(chat_text: str, context: str = "") -> str:
+    user_message = f"Summarise the following chat conversation.\n\n<chat>\n{chat_text}\n</chat>"
+    if context:
+        user_message += f"\n\nUse the following related context as additional background:\n\n<context>\n{context}\n</context>"
+    response = _client.chat.completions.create(
+        model="gpt-4o-mini",
+        messages=[
+            {"role": "system", "content": "You are a professional chat summarisation assistant. Summarise the chat conversation accurately and completely. Do not miss any information from the chat. Do not add any information that is not in the chat."},
+            {"role": "user", "content": user_message}
+        ],
+        temperature=0,
+        max_tokens=300
     )
     return response.choices[0].message.content.strip()
 

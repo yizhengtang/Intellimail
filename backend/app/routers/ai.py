@@ -3,6 +3,7 @@
 #This is the ONLY layer that calls Gmail/Outlook API functions.
 #The AI layer (agents, retrieval, ingestion) receives clean data — it never calls email APIs directly.
 
+import datetime
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
@@ -16,19 +17,23 @@ from Outlook.outlook_api import (
     get_email_messages as outlook_list,
     get_email_message_details as outlook_detail,
 )
+from Teams.teams_api import initialize_teams_service, get_chat_messages as teams_get_messages
 
 from ai.agents import (
     summarize_email,
+    summarize_chat,
     categorize_email,
     extract_events,
     generate_reply,
     score_priority,
     is_spam,
 )
+from bs4 import BeautifulSoup
 from ai.chat import chat_response
 from ai.ingestion import extract_text, ingest_folder
 from ai.retrieval import retrieve_context
-from ai.vector_store import get_collection
+from ai.vector_store import get_collection, document_exists, delete_document, add_document
+from ai.embeddings import embed_text
 
 router = APIRouter()
 
@@ -79,6 +84,19 @@ def _fetch_inbox_for_ingest(provider: str, max_results: int) -> list[dict]:
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to fetch inbox: {e}")
 
+#Fetches all messages in a Teams chat and formats them as a single plain-text block.
+#HTML content is stripped using BeautifulSoup so agents receive clean plain text.
+#Truncated to 8000 characters to stay within the embedding model's token limit.
+def _format_chat_thread(chat_id: str) -> str:
+    token = initialize_teams_service()
+    messages = teams_get_messages(token, chat_id, max_results=50)
+    ordered = list(reversed(messages))
+    lines = [f"[{msg['sender_name']}]: {msg['content']}" for msg in ordered]
+    text = "\n".join(lines)
+    text = BeautifulSoup(text, "html.parser").get_text(separator=" ")
+    return text[:8000]
+
+
 #Ingest
 
 #Pulls emails from the provider, embeds them, and stores them in ChromaDB.
@@ -88,21 +106,53 @@ def ingest(provider: str, max_results: int = 20):
     emails = _fetch_inbox_for_ingest(provider, max_results)
     return ingest_folder(emails, provider)
 
-#Status
 
-#Returns a count of indexed emails per provider so the frontend can show sync state.
+#Ingests a single Teams chat into ChromaDB as one document (full thread).
+#If the chat was previously indexed, the old document is deleted and re-embedded with fresh messages.
+#This ensures the AI context always reflects the most recent state of the conversation.
+@router.post("/ingest/teams/{chat_id}")
+def ingest_teams_chat(chat_id: str, chat_topic: str = ""):
+    try:
+        text = _format_chat_thread(chat_id)
+        if not text.strip():
+            return {"indexed": 0, "updated": 0}
+
+        embedding = embed_text(text)
+        metadata = {
+            "provider": "teams",
+            "message_type": "chat",
+            "thread_id": chat_id,
+            "subject": chat_topic,
+            "from": "",
+            "date": "",
+            "timestamp": int(datetime.datetime.now().timestamp()),
+        }
+
+        already_exists = document_exists(chat_id)
+        if already_exists:
+            delete_document(chat_id)
+
+        add_document(chat_id, text, embedding, metadata)
+        return {"indexed": 0 if already_exists else 1, "updated": 1 if already_exists else 0}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+#Returns a count of indexed documents per provider so the frontend can show sync state.
 @router.get("/status")
 def status():
     collection = get_collection()
     gmail_count = len(collection.get(where={"provider": "gmail"})["ids"])
     outlook_count = len(collection.get(where={"provider": "outlook"})["ids"])
+    teams_count = len(collection.get(where={"provider": "teams"})["ids"])
     return {
         "gmail": gmail_count,
         "outlook": outlook_count,
+        "teams": teams_count,
         "total": collection.count(),
     }
 
-#Agent endpoints — email panel buttons
+#Agent endpoints
 
 @router.post("/emails/{provider}/{message_id}/summarize")
 def summarize(provider: str, message_id: str):
@@ -142,6 +192,43 @@ def spam(provider: str, message_id: str):
     email = _fetch_email(provider, message_id)
     text = extract_text(email)
     return is_spam(text)
+
+#Teams chat agent endpoints
+
+@router.post("/chats/{chat_id}/summarize")
+def summarize_chat_endpoint(chat_id: str):
+    try:
+        text = _format_chat_thread(chat_id)
+        context = retrieve_context(text)
+        return {"summary": summarize_chat(text, context)}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/chats/{chat_id}/reply")
+def reply_chat(chat_id: str):
+    try:
+        text = _format_chat_thread(chat_id)
+        context = retrieve_context(text, k=3)
+        return {"draft": generate_reply(text, context)}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/chats/{chat_id}/events")
+def events_chat(chat_id: str):
+    try:
+        text = _format_chat_thread(chat_id)
+        return {"events": extract_events(text)}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/chats/{chat_id}/priority")
+def priority_chat(chat_id: str):
+    try:
+        text = _format_chat_thread(chat_id)
+        context = retrieve_context(text, k=3)
+        return score_priority(text, context)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 #Chat
 

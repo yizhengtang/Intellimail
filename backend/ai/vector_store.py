@@ -24,19 +24,27 @@ def get_collection() -> Collection:
         configuration={"hnsw": {"space": "cosine"}}
     )
 
-#Returns True if an email with this ID is already stored in the collection.
+#Returns True if a document with this ID is already stored in the collection.
 #Used by ingest_email() to skip re-embedding emails that haven't changed.
-def email_exists(email_id: str) -> bool:
+#Also used by the Teams ingest flow to check if a chat has been indexed before.
+def document_exists(doc_id: str) -> bool:
     collection = get_collection()
-    result = collection.get(ids=[email_id])
+    result = collection.get(ids=[doc_id])
     return len(result["ids"]) > 0
 
-#Inserts or updates one email in the vector store.
-#upsert is used so re-indexing an already-stored email updates it instead of raising an error.
-def add_email(email_id: str, text: str, embedding: list[float], metadata: dict) -> None:
+#Deletes one document from the vector store by its ID.
+#Used by the Teams ingest flow to remove a stale chat document before re-embedding.
+def delete_document(doc_id: str) -> None:
+    collection = get_collection()
+    collection.delete(ids=[doc_id])
+
+
+#Inserts or updates one document in the vector store.
+#upsert is used so re-indexing an already-stored document updates it instead of raising an error.
+def add_document(doc_id: str, text: str, embedding: list[float], metadata: dict) -> None:
     collection = get_collection()
     collection.upsert(
-        ids=[email_id],
+        ids=[doc_id],
         embeddings=[embedding],
         documents=[text],
         metadatas=[metadata]
