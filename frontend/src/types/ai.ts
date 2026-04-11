@@ -10,6 +10,7 @@ export interface ChatMessage {
 export interface AiStatus {
   gmail: number;
   outlook: number;
+  teams: number;
   total: number;
 }
 
