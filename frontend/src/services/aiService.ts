@@ -56,6 +56,24 @@ export const scorePriority = (provider: string, messageId: string) =>
 export const checkSpam = (provider: string, messageId: string) =>
   api.post<never, AiSpam>(`/ai/emails/${provider}/${messageId}/spam`);
 
+//Teams chat agents
+
+//POST /ai/chats/:chatId/summarize
+export const summarizeChat = (chatId: string) =>
+  api.post<never, AiSummary>(`/ai/chats/${chatId}/summarize`);
+
+//POST /ai/chats/:chatId/reply
+export const generateChatReply = (chatId: string) =>
+  api.post<never, AiReply>(`/ai/chats/${chatId}/reply`);
+
+//POST /ai/chats/:chatId/events
+export const extractChatEvents = (chatId: string) =>
+  api.post<never, AiEvents>(`/ai/chats/${chatId}/events`);
+
+//POST /ai/chats/:chatId/priority
+export const scoreChatPriority = (chatId: string) =>
+  api.post<never, AiPriority>(`/ai/chats/${chatId}/priority`);
+
 //Chat
 
 //POST /ai/chat
