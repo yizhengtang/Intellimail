@@ -12,6 +12,7 @@ backend/Outlook/attachments/
 backend/Outlook/downloads/
 backend/client_secret.json
 backend/Outlook/*.txt
+backend/Teams/*.txt
 
 # Python cache files
 __pycache__/

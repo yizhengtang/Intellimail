@@ -47,13 +47,17 @@ def make_graph_request(access_token, endpoint, method='GET', params=None, json_d
 
 
 #Returns a list of the user's chats (1:1 and group) using Teams-native field names.
-#$expand=lastMessagePreview fetches the last message preview in the same call — avoids N+1 requests.
-#For 1:1 chats, topic is null from the API — derived as "Chat with {sender_name}" instead.
+#$expand=lastMessagePreview,members fetches preview and members in the same call — avoids N+1 requests.
+#For 1:1 chats, topic is null from the API — derived as "Chat with {other person}" instead.
+#One extra /me call gets the current user's ID so we can identify the other member in 1:1 chats.
 def list_chats(access_token, max_results=10):
+    #Get the current user's ID so we can exclude them when naming 1:1 chats.
+    me = make_graph_request(access_token, 'me', params={'$select': 'id'})
+    my_id = me.get('id', '')
+
     params = {
         '$top': min(50, max_results),
-        '$expand': 'lastMessagePreview',
-        '$orderby': 'lastMessagePreview/createdDateTime desc'
+        '$expand': 'lastMessagePreview,members',
     }
 
     result = make_graph_request(access_token, 'me/chats', params=params)
@@ -70,8 +74,21 @@ def list_chats(access_token, max_results=10):
             or 'Unknown'
         )
 
-        #Group chats have a topic; 1:1 chats return topic: null so we derive one.
-        topic = chat.get('topic') or f'Chat with {sender_name}'
+        members = chat.get('members', [])
+        others = [m for m in members if m.get('userId') != my_id]
+
+        if chat.get('chatType') == 'oneOnOne':
+            #1:1 chat — just show the other person's name.
+            topic = others[0]['displayName'] if others else 'Unknown'
+        elif chat.get('topic'):
+            #Named group chat — use the group name.
+            topic = chat['topic']
+        else:
+            #Unnamed group chat — show first two other members, then "+N more" if needed.
+            names = [m['displayName'] for m in others[:2]]
+            topic = ', '.join(names)
+            if len(others) > 2:
+                topic += f' and +{len(others) - 2}'
 
         chats.append({
             'id': chat['id'],
@@ -80,7 +97,7 @@ def list_chats(access_token, max_results=10):
             'last_sender': sender_name,
             'last_message': preview.get('body', {}).get('content', ''),
             'last_message_time': preview.get('createdDateTime', ''),
-            'member_count': 0,      # fetching members requires an extra call per chat — not worth the cost
+            'member_count': len(chat.get('members', [])),
         })
 
     return chats[:max_results]
@@ -98,6 +115,11 @@ def get_chat_messages(access_token, chat_id, max_results=50):
     messages = []
 
     for msg in result.get('value', []):
+        #Skip system event messages (join/leave notifications, name changes, etc.).
+        #These have messageType != 'message' and no meaningful sender or content.
+        if msg.get('messageType') != 'message':
+            continue
+
         sender_info = msg.get('from') or {}
         sender_name = (
             (sender_info.get('user') or {}).get('displayName')

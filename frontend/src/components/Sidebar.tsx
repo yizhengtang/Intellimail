@@ -92,6 +92,21 @@ export default function Sidebar() {
         >
           Sync Inbox
         </Link>
+        <Link
+          to="/teams"
+          style={{
+            display: 'block',
+            padding: '8px 12px',
+            textDecoration: 'none',
+            color: '#6264a7',
+            border: '1px solid #6264a7',
+            borderRadius: 4,
+            textAlign: 'center',
+            marginTop: 8,
+          }}
+        >
+          Teams
+        </Link>
       </div>
 
       <h4 style={{ marginTop: 24 }}>Folders</h4>
