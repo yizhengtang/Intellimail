@@ -6,6 +6,7 @@ import { useParams } from 'react-router-dom';
 import type { TeamsMessage } from '../types/teams';
 import { getChatMessages, sendChatMessage } from '../services/teamsService';
 import TeamsChatView from '../components/TeamsChatView';
+import TeamsAiPanel from '../components/TeamsAiPanel';
 
 //TeamsChatPage reads the chatId from the URL, fetches all messages, and renders the thread.
 //A send box at the bottom lets the user send a new message to the chat.
@@ -82,6 +83,9 @@ export default function TeamsChatPage() {
         <TeamsChatView messages={messages} />
         <div ref={bottomRef} />
       </div>
+
+      {/* AI panel */}
+      <TeamsAiPanel chatId={chatId || ''} onReplyDraft={setInput} />
 
       {/* Send box */}
       <div style={{ borderTop: '1px solid #e0e0e0', padding: 16 }}>
