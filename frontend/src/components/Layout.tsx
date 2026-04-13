@@ -16,7 +16,7 @@ export default function Layout() {
 
   return (
     <div style={{ display: 'flex' }}>
-      <div style={{ width: 220, borderRight: '1px solid #e0e0e0' }}>
+      <div style={{ width: 64, flexShrink: 0 }}>
         <Sidebar />
       </div>
       <div style={{ flex: 1 }}>
