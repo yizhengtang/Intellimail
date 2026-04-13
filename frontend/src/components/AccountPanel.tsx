@@ -5,7 +5,8 @@
 
 import { useState, useEffect, useRef } from 'react';
 import type { AuthStatus } from '../types/auth';
-import { getAuthStatus, signOut, connect } from '../services/authService';
+import { signOut, connect } from '../services/authService';
+import { useAuth } from '../context/AuthContext';
 
 interface AccountPanelProps {
   onClose: () => void;
@@ -27,22 +28,14 @@ const btnStyle: React.CSSProperties = {
   backgroundColor: 'transparent',
 };
 
-//AccountPanel fetches auth status on mount and renders one row per provider.
+//AccountPanel reads auth status from AuthContext — no API call on open, instant display.
+//handleSignOut and handleConnect call refresh() after their action to update the shared state.
 //The parent (Layout.tsx) controls whether this component is rendered — it has no open/close state of its own.
 //Clicking outside the panel calls onClose() so the parent can unmount it.
 export default function AccountPanel({ onClose }: AccountPanelProps) {
-  const [status, setStatus] = useState<AuthStatus | null>(null);
-  const [loading, setLoading] = useState(false);
+  const { authStatus, refresh } = useAuth();
   const [actionInProgress, setActionInProgress] = useState<string | null>(null);
   const panelRef = useRef<HTMLDivElement>(null);
-
-  //Fetch auth status as soon as the panel opens.
-  useEffect(() => {
-    setLoading(true);
-    getAuthStatus()
-      .then(data => setStatus(data))
-      .finally(() => setLoading(false));
-  }, []);
 
   //Close the panel when the user clicks anywhere outside it.
   useEffect(() => {
@@ -55,25 +48,23 @@ export default function AccountPanel({ onClose }: AccountPanelProps) {
     return () => document.removeEventListener('mousedown', handleMouseDown);
   }, [onClose]);
 
-  //Sign out of a provider — deletes its token file, then re-fetches status.
+  //Sign out of a provider — deletes its token file, then refreshes shared auth status.
   async function handleSignOut(provider: string) {
     setActionInProgress(provider);
     try {
       await signOut(provider);
-      const updated = await getAuthStatus();
-      setStatus(updated);
+      await refresh();
     } finally {
       setActionInProgress(null);
     }
   }
 
-  //Connect a provider — triggers the OAuth browser flow, then re-fetches status.
+  //Connect a provider — triggers the OAuth browser flow, then refreshes shared auth status.
   async function handleConnect(provider: string) {
     setActionInProgress(provider);
     try {
       await connect(provider);
-      const updated = await getAuthStatus();
-      setStatus(updated);
+      await refresh();
     } finally {
       setActionInProgress(null);
     }
@@ -100,10 +91,10 @@ export default function AccountPanel({ onClose }: AccountPanelProps) {
         Connected Accounts
       </p>
 
-      {loading && <p style={{ fontSize: 13, color: '#888' }}>Loading...</p>}
+      {!authStatus && <p style={{ fontSize: 13, color: '#888' }}>Loading...</p>}
 
-      {!loading && status && PROVIDERS.map(({ key, label }) => {
-        const info = status[key];
+      {authStatus && PROVIDERS.map(({ key, label }) => {
+        const info = authStatus[key];
         const isActing = actionInProgress === key;
 
         return (
