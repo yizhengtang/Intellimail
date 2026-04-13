@@ -7,7 +7,7 @@ from MS_Graph import get_access_token, MS_GRAPH_BASE_ENDPOINT
 load_dotenv()
 
 #Initialize Outlook service by getting access token
-def initialize_outlook_service(scopes=['https://graph.microsoft.com/Mail.ReadWrite']):
+def initialize_outlook_service(scopes=['https://graph.microsoft.com/Mail.ReadWrite', 'User.Read']):
     app_id = os.getenv('MICROSOFT_CLIENT_ID')
     client_secret = os.getenv('MICROSOFT_CLIENT_SECRET')
 
