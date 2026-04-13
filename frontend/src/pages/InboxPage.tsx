@@ -1,6 +1,7 @@
 //InboxPage.tsx
 //Main inbox view — shows the email list, search results, or trash view with batch actions.
 
+import { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useEmails } from '../hooks/useEmails';
 import { useSearch } from '../hooks/useSearch';
@@ -8,6 +9,8 @@ import { useProvider } from '../context/ProviderContext';
 import * as gmailService from '../services/gmailService';
 import * as outlookService from '../services/outlookService';
 import EmailList from '../components/EmailList';
+import { getAuthStatus } from '../services/authService';
+import type { AuthStatus } from '../types/auth';
 
 //This page reads two URL search params:
 //  ?q=     — search query (shows search results instead of normal inbox)
@@ -20,6 +23,13 @@ export default function InboxPage() {
   const query = searchParams.get('q') || '';
   const folder = searchParams.get('folder') || undefined;
   const { provider } = useProvider();
+
+  const [authStatus, setAuthStatus] = useState<AuthStatus | null>(null);
+
+  //Fetch auth status on mount so we can guard against disconnected providers.
+  useEffect(() => {
+    getAuthStatus().then(setAuthStatus);
+  }, [provider]);
 
   const inbox = useEmails(folder);
   const search = useSearch(query);
@@ -60,6 +70,25 @@ export default function InboxPage() {
       //Batch action failed — list stays unchanged
     }
   };
+
+  //Guard — show a not-connected message instead of calling the email API.
+  //Only checked once authStatus has loaded (null means still loading — let through to avoid flicker).
+  if (authStatus) {
+    if (provider === 'gmail' && !authStatus.gmail.connected) {
+      return (
+        <p style={{ padding: 24, color: '#888' }}>
+          Gmail is not connected. Open the Account panel to connect.
+        </p>
+      );
+    }
+    if (provider === 'outlook' && !authStatus.outlook.connected) {
+      return (
+        <p style={{ padding: 24, color: '#888' }}>
+          Outlook is not connected. Open the Account panel to connect.
+        </p>
+      );
+    }
+  }
 
   if (error) return <p style={{ padding: 24 }}>{error}</p>;
 
