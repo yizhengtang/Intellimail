@@ -1,16 +1,14 @@
 //InboxPage.tsx
 //Main inbox view — shows the email list, search results, or trash view with batch actions.
 
-import { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useEmails } from '../hooks/useEmails';
 import { useSearch } from '../hooks/useSearch';
 import { useProvider } from '../context/ProviderContext';
+import { useAuth } from '../context/AuthContext';
 import * as gmailService from '../services/gmailService';
 import * as outlookService from '../services/outlookService';
 import EmailList from '../components/EmailList';
-import { getAuthStatus } from '../services/authService';
-import type { AuthStatus } from '../types/auth';
 
 //This page reads two URL search params:
 //  ?q=     — search query (shows search results instead of normal inbox)
@@ -23,13 +21,7 @@ export default function InboxPage() {
   const query = searchParams.get('q') || '';
   const folder = searchParams.get('folder') || undefined;
   const { provider } = useProvider();
-
-  const [authStatus, setAuthStatus] = useState<AuthStatus | null>(null);
-
-  //Fetch auth status on mount so we can guard against disconnected providers.
-  useEffect(() => {
-    getAuthStatus().then(setAuthStatus);
-  }, [provider]);
+  const { authStatus } = useAuth();
 
   const inbox = useEmails(folder);
   const search = useSearch(query);
