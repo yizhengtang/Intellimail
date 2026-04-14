@@ -225,7 +225,20 @@ def get_trash(max_results: int = 10):
 @router.get("/folders")
 def get_folders(include_hidden: bool = False):
     token = get_token()
-    return list_folders(token, include_hidden=include_hidden)
+    raw = list_folders(token, include_hidden=include_hidden)
+    #Remap Outlook-specific field names to the shared Folder interface the frontend expects.
+    #list_folders returns display_name and unread_item_count — the frontend needs name and unread_count.
+    return [
+        {
+            'id': f.get('id'),
+            'name': f.get('display_name'),
+            'parent_folder_id': f.get('parent_folder_id'),
+            'child_folder_count': f.get('child_folder_count', 0),
+            'unread_count': f.get('unread_item_count', 0),
+            'total_count': f.get('total_item_count', 0),
+        }
+        for f in raw
+    ]
 
 
 @router.get("/folders/{folder_id}")
