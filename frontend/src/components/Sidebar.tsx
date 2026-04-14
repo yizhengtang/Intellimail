@@ -2,7 +2,7 @@
 //Icon-only navigation sidebar — nav links in the middle, Gmail/Outlook/Teams provider icons at the bottom.
 
 import type { CSSProperties } from 'react';
-import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { useProvider } from '../context/ProviderContext';
 
 const ACTIVE_ICON = '#5c5fc4';
@@ -125,10 +125,16 @@ function navItemStyle(active: boolean): CSSProperties {
   };
 }
 
-export default function Sidebar() {
-  const { provider, setProvider } = useProvider();
+type OpenPanel = 'gmail' | 'outlook' | 'teams' | null;
+
+interface Props {
+  onPanelToggle: (panel: OpenPanel) => void;
+  openPanel: OpenPanel;
+}
+
+export default function Sidebar({ onPanelToggle, openPanel }: Props) {
+  const { setProvider } = useProvider();
   const location = useLocation();
-  const navigate = useNavigate();
   const path = location.pathname;
 
   //email-related paths all count as "inbox" being active
@@ -170,24 +176,24 @@ export default function Sidebar() {
       <div style={{ ...sectionBox, marginBottom: 12 }}>
         <button
           title="Gmail"
-          onClick={() => { setProvider('gmail'); navigate('/'); }}
+          onClick={() => { setProvider('gmail'); onPanelToggle('gmail'); }}
           style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '6px 0' }}
         >
-          <GmailIcon active={provider === 'gmail' && !path.startsWith('/teams')} />
+          <GmailIcon active={openPanel === 'gmail'} />
         </button>
         <button
           title="Outlook"
-          onClick={() => { setProvider('outlook'); navigate('/'); }}
+          onClick={() => { setProvider('outlook'); onPanelToggle('outlook'); }}
           style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '6px 0' }}
         >
-          <OutlookIcon active={provider === 'outlook' && !path.startsWith('/teams')} />
+          <OutlookIcon active={openPanel === 'outlook'} />
         </button>
         <button
           title="Microsoft Teams"
-          onClick={() => navigate('/teams')}
+          onClick={() => onPanelToggle('teams')}
           style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '6px 0' }}
         >
-          <TeamsAppIcon active={path.startsWith('/teams')} />
+          <TeamsAppIcon active={openPanel === 'teams'} />
         </button>
       </div>
 

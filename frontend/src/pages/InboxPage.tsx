@@ -19,7 +19,9 @@ import EmailList from '../components/EmailList';
 export default function InboxPage() {
   const [searchParams] = useSearchParams();
   const query = searchParams.get('q') || '';
-  const folder = searchParams.get('folder') || undefined;
+  const folderParam = searchParams.get('folder');
+  //Guard against stale "undefined" string that can appear in the URL from old navigation bugs.
+  const folder = folderParam && folderParam !== 'undefined' ? folderParam : undefined;
   const { provider } = useProvider();
   const { authStatus } = useAuth();
 
