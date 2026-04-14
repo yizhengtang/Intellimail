@@ -14,32 +14,46 @@ def initialize_gmail_service(api_name = 'gmail', api_version = 'v1', scopes = ['
     service = create_gmail_service(api_name, api_version, scopes)
     return service
 
-#Helper function to extract the body from email payload (data structure in email messages that contains the actual content of the email) (body text, headers, attachments ...)
+#Helper function to extract the body from email payload.
+#Returns (body_content, body_type) where body_type is 'html' or 'plain'.
+#Prefers text/html over text/plain so rich emails (e.g. Uber receipts) render correctly.
+#Recurses into nested multipart parts because Gmail often nests content inside
+#multipart/mixed → multipart/alternative → text/html.
 def extract_body(payload):
+    html_body = None
+    plain_body = None
 
-    #Default body: no text body is found
-    body = '<Text body not available>'
-
-    #Checks if parts or body exists in the payload
-    #Gmail API structures email content in parts, especially for multipart emails (HTML + plain text)
-    #Sometimes it can have nested parts, Base64 encoded content.
-    #Multipart emails are the most common format used today, in this loop it will iterate through the parts to find the plain text version of the email body.
     if 'parts' in payload:
         for part in payload['parts']:
-            
-            if part['mimeType'] == 'multipart/alternative':
-                for subpart in part['parts']:
-                    if subpart['mimeType'] == 'text/plain' and 'data' in subpart['body']:
-                        body = base64.urlsafe_b64decode(subpart['body']['data']).decode('utf-8')
-                        break
+            mime = part.get('mimeType', '')
 
-            elif part['mimeType'] == 'text/plain' and 'data' in part['body']:
-                body = base64.urlsafe_b64decode(part['body']['data']).decode('utf-8')
-                break
+            #Recurse into any multipart container to find the actual text parts inside.
+            if mime.startswith('multipart/'):
+                sub_body, sub_type = extract_body(part)
+                if sub_type == 'html' and not html_body:
+                    html_body = sub_body
+                elif sub_type == 'plain' and not plain_body:
+                    plain_body = sub_body
+
+            elif mime == 'text/html' and 'data' in part.get('body', {}):
+                html_body = base64.urlsafe_b64decode(part['body']['data']).decode('utf-8')
+
+            elif mime == 'text/plain' and 'data' in part.get('body', {}):
+                plain_body = base64.urlsafe_b64decode(part['body']['data']).decode('utf-8')
 
     elif 'body' in payload and 'data' in payload['body']:
-        body = base64.urlsafe_b64decode(payload['body']['data']).decode('utf-8')
-    return body
+        #Single-part email — check the payload's own mimeType before assuming plain text.
+        decoded = base64.urlsafe_b64decode(payload['body']['data']).decode('utf-8')
+        if payload.get('mimeType') == 'text/html':
+            html_body = decoded
+        else:
+            plain_body = decoded
+
+    if html_body:
+        return html_body, 'html'
+    if plain_body:
+        return plain_body, 'plain'
+    return '<Text body not available>', 'plain'
 
 #this function gets email messages from Gmail API service, user_id represents the user account.
 #Returns summary-level data for each messages.
@@ -166,8 +180,8 @@ def get_email_message_details(service, message_id, user_id='me'):
     star = message.get('labelIds', []).count('STARRED') > 0
     label = ' , '.join(message.get('labelIds', []))
 
-    #Using the extract_body function to get the body content from the email payload.
-    body = extract_body(payload)
+    #Using the extract_body function to get the body content and type from the email payload.
+    body, body_type = extract_body(payload)
 
     email_details = {
         'id': message_id,
@@ -177,12 +191,13 @@ def get_email_message_details(service, message_id, user_id='me'):
         'snippet': snippet,
         'thread_id': thread_id,
         'body': body,
+        'body_type': body_type,
         'has_attachments': has_attachments,
         'date': date,
         'starred': star,
         'label': label
     }
-    return email_details 
+    return email_details
 
 #This function will send an email with attachments.
 def send_email_with_attachment(service, to, subject, body, body_type='plain', attachment_paths=None):
@@ -443,6 +458,59 @@ def download_attachments_all(service, user_id, message_id, download_dir):
     messages = thread.get('messages', [])
     for msg in messages:
         download_attachments(service, user_id, msg['id'], download_dir)
+
+#Recursively flattens nested MIME parts into a single list.
+#Gmail can nest attachments inside multipart/mixed parts, so a flat scan would miss them.
+def _flatten_parts(parts):
+    result = []
+    for part in parts:
+        result.append(part)
+        if 'parts' in part:
+            result.extend(_flatten_parts(part['parts']))
+    return result
+
+#Returns metadata for every attachment in an email (id, filename, content_type, size).
+#Does not fetch file bytes — only the info needed to render the attachment list in the UI.
+def get_attachment_list(service, message_id, user_id='me'):
+    message = service.users().messages().get(
+        userId=user_id, id=message_id, format='full'
+    ).execute()
+    parts = _flatten_parts(message.get('payload', {}).get('parts', []))
+    attachments = []
+    for part in parts:
+        filename = part.get('filename')
+        body = part.get('body', {})
+        attachment_id = body.get('attachmentId')
+        if filename and attachment_id:
+            attachments.append({
+                'id': attachment_id,
+                'filename': filename,
+                'content_type': part.get('mimeType', 'application/octet-stream'),
+                'size': body.get('size', 0),
+            })
+    return attachments
+
+#Fetches the raw bytes for a single attachment by its attachment_id.
+#Returns (bytes, filename, content_type) so the router can stream the file to the browser.
+def get_attachment_data(service, message_id, attachment_id, user_id='me'):
+    #Re-fetch the message to resolve the filename and content_type for this attachment_id.
+    message = service.users().messages().get(
+        userId=user_id, id=message_id, format='full'
+    ).execute()
+    parts = _flatten_parts(message.get('payload', {}).get('parts', []))
+    filename = 'attachment'
+    content_type = 'application/octet-stream'
+    for part in parts:
+        if part.get('body', {}).get('attachmentId') == attachment_id:
+            filename = part.get('filename', 'attachment')
+            content_type = part.get('mimeType', 'application/octet-stream')
+            break
+    #Fetch the base64url-encoded attachment data from the Gmail API and decode it.
+    attachment = service.users().messages().attachments().get(
+        userId=user_id, messageId=message_id, id=attachment_id
+    ).execute()
+    data = base64.urlsafe_b64decode(attachment.get('data', '').encode('UTF-8'))
+    return data, filename, content_type
         
 #This function will try to look for individual emails and return summary metadata for each result.
 def search_emails(service, query, user_id='me', max_results=5):
@@ -864,9 +932,8 @@ def get_draft_email_details(service, draft_id, format='full'):
     star = draft_message.get('labelIds', []).count('STARRED') > 0
     label = ' , '.join(draft_message.get('labelIds', []))
 
-    #Using the extract_body function to get the body content from the draft payload.
-    #This handles all email formats: multipart, nested multipart/alternative, and simple single-part.
-    body = extract_body(draft_payload)
+    #Using the extract_body function to get the body content and type from the draft payload.
+    body, body_type = extract_body(draft_payload)
 
     draft_details = {
         'id': draft_id,
@@ -874,6 +941,7 @@ def get_draft_email_details(service, draft_id, format='full'):
         'from': sender,
         'to': recipient,
         'body': body,
+        'body_type': body_type,
         'snippet': snippet,
         'thread_id': thread_id,
         'has_attachments': has_attachments,
@@ -909,7 +977,7 @@ def get_email_conversations(service, message_id):
         sender = next((header['value'] for header in msg['payload'].get('headers', []) if header['name'].lower() == 'from'), 'Unknown sender')
         recipient = next((header['value'] for header in msg['payload'].get('headers', []) if header['name'].lower() == 'to'), 'Unknown recipient(s)')
         date = next((header['value'] for header in msg['payload'].get('headers', []) if header['name'].lower() == 'date'), 'No date available')
-        body = extract_body(msg['payload'])
+        body, body_type = extract_body(msg['payload'])
 
         processed_messages.append({
             'id': msg['id'],
@@ -917,6 +985,7 @@ def get_email_conversations(service, message_id):
             'from': sender,
             'to': recipient,
             'body': body,
+            'body_type': body_type,
             'date': date
         })
     return processed_messages

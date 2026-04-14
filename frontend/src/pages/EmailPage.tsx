@@ -3,13 +3,20 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useParams } from 'react-router-dom';
-import type { EmailDetail as EmailDetailType } from '../types/email';
+import type { EmailDetail as EmailDetailType, AttachmentInfo } from '../types/email';
 import { useEmailDetail } from '../hooks/useEmailDetail';
 import EmailDetail from '../components/EmailDetail';
 import AiPanel from '../components/AiPanel';
 import { formatDate } from '../utils/format';
 import * as gmailService from '../services/gmailService';
 import * as outlookService from '../services/outlookService';
+
+//Formats a byte count into a human-readable size string.
+function formatSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
 
 //This page extracts the provider and id from the URL using useParams().
 //It fetches the main email via useEmailDetail and the conversation thread separately.
@@ -20,6 +27,7 @@ export default function EmailPage() {
   const { email, loading, error } = useEmailDetail(provider || '', id || '');
 
   const [isRead, setIsRead] = useState(true);
+  const [attachments, setAttachments] = useState<AttachmentInfo[]>([]);
   const [thread, setThread] = useState<EmailDetailType[]>([]);
   const [threadLoading, setThreadLoading] = useState(true);
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
@@ -70,6 +78,15 @@ export default function EmailPage() {
       //Toggle failed — state stays unchanged
     }
   };
+
+  //Fetch the attachment list when the email has attachments.
+  useEffect(() => {
+    if (!email?.has_attachments || !provider || !id) return;
+    const fetch = provider === 'gmail'
+      ? gmailService.getAttachments(id)
+      : outlookService.getAttachments(id);
+    fetch.then(setAttachments).catch(() => {});
+  }, [email?.has_attachments, provider, id]);
 
   //Fetch the conversation thread for this email
   const fetchThread = useCallback(async () => {
@@ -158,6 +175,68 @@ export default function EmailPage() {
         onReplyAll={() => { setReplyMode('reply-all'); setReplyBody(''); setReplyError(null); }}
       />
 
+      {/* Attachment section — only rendered when there are attachments */}
+      {attachments.length > 0 && (
+        <div style={{ padding: '0 24px 20px' }}>
+          <div style={{ fontSize: 13, fontWeight: 600, color: '#6b7280', marginBottom: 10 }}>
+            Attachments ({attachments.length})
+          </div>
+
+          {/* Inline images */}
+          {attachments.filter(a => a.content_type.startsWith('image/')).map(att => (
+            <div key={att.id} style={{ marginBottom: 12 }}>
+              <img
+                src={provider === 'gmail'
+                  ? gmailService.getAttachmentUrl(id!, att.id)
+                  : outlookService.getAttachmentUrl(id!, att.id)}
+                alt={att.filename}
+                style={{ maxWidth: '100%', maxHeight: 400, borderRadius: 8, display: 'block' }}
+              />
+              <div style={{ fontSize: 12, color: '#9ca3af', marginTop: 4 }}>{att.filename}</div>
+            </div>
+          ))}
+
+          {/* Document / file chips */}
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+            {attachments.filter(a => !a.content_type.startsWith('image/')).map(att => (
+              <a
+                key={att.id}
+                href={provider === 'gmail'
+                  ? gmailService.getAttachmentUrl(id!, att.id)
+                  : outlookService.getAttachmentUrl(id!, att.id)}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 10,
+                  padding: '10px 14px',
+                  border: '1px solid #e5e7eb',
+                  borderRadius: 10,
+                  backgroundColor: '#f9fafb',
+                  textDecoration: 'none',
+                  color: '#374151',
+                  minWidth: 180,
+                  maxWidth: 260,
+                }}
+              >
+                {/* Generic file icon */}
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#6b7280" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+                  <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" />
+                  <polyline points="14,2 14,8 20,8" />
+                </svg>
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontSize: 13, fontWeight: 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    {att.filename}
+                  </div>
+                  <div style={{ fontSize: 11, color: '#9ca3af', marginTop: 2 }}>
+                    {formatSize(att.size)}
+                  </div>
+                </div>
+              </a>
+            ))}
+          </div>
+        </div>
+      )}
+
       <AiPanel provider={provider || ''} messageId={id || ''} />
 
       {replyMode && (
@@ -245,7 +324,18 @@ export default function EmailPage() {
                     {msg.cc && <div><strong>Cc:</strong> {msg.cc}</div>}
                   </div>
                   {msg.body_type === 'html' || msg.body_type === 'HTML' ? (
-                    <div dangerouslySetInnerHTML={{ __html: msg.body }} />
+                    <iframe
+                      srcDoc={msg.body}
+                      title="Email content"
+                      sandbox="allow-same-origin"
+                      style={{ width: '100%', border: 'none', minHeight: 200, display: 'block' }}
+                      onLoad={e => {
+                        try {
+                          const doc = e.currentTarget.contentDocument;
+                          if (doc?.body) e.currentTarget.style.height = `${doc.body.scrollHeight + 32}px`;
+                        } catch { /* sandbox may restrict access */ }
+                      }}
+                    />
                   ) : (
                     <pre style={{ whiteSpace: 'pre-wrap', fontFamily: 'inherit' }}>{msg.body}</pre>
                   )}

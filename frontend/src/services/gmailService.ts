@@ -1,5 +1,5 @@
 import api from './api';
-import type { EmailSummary, EmailDetail, ComposeEmailPayload, ReplyPayload, Folder, DraftSummary, DraftDetail } from '../types/email';
+import type { EmailSummary, EmailDetail, ComposeEmailPayload, ReplyPayload, Folder, DraftSummary, DraftDetail, AttachmentInfo } from '../types/email';
 
 //Gmail API Service
 //Each function maps to one endpoint in backend/app/routers/gmail.py
@@ -84,6 +84,16 @@ export const replyAllEmail = (messageId: string, payload: ReplyPayload) =>
   });
 
 //Attachments
+
+//GET /gmail/emails/:id/attachments
+//Returns the metadata list (id, filename, content_type, size) for all attachments in an email
+export const getAttachments = (messageId: string) =>
+  api.get<never, AttachmentInfo[]>(`/gmail/emails/${messageId}/attachments`);
+
+//Constructs the direct URL for a single attachment.
+//Used in <img src> for images and <a href> for document downloads — the browser requests it directly.
+export const getAttachmentUrl = (messageId: string, attachmentId: string) =>
+  `http://localhost:8000/gmail/emails/${messageId}/attachments/${attachmentId}`;
 
 //GET /gmail/emails/:id/attachments/download
 //This function downloads attachments from one email

@@ -86,6 +86,15 @@ export interface DraftSummary {
   provider?: Provider;  // Added client-side for unified view
 }
 
+//AttachmentInfo is the metadata for a single attachment returned by the list endpoint.
+//The frontend uses id + the message id to construct the streaming URL for <img> and <a>.
+export interface AttachmentInfo {
+  id: string;
+  filename: string;
+  content_type: string;
+  size: number;
+}
+
 //DraftDetail is the shape of a draft email when viewing the full details.
 export interface DraftDetail {
   id: string;
