@@ -18,6 +18,43 @@ const GMAIL_VISIBLE_SYSTEM_LABELS = ['INBOX', 'SENT', 'TRASH', 'DRAFT', 'STARRED
 
 type PanelType = 'gmail' | 'outlook' | 'teams' | null;
 
+//A parent label and its direct children, derived from Gmail's flat label list.
+//Gmail encodes nesting with a "/" in the label name — "Course/FYP" is a child of "Course".
+interface LabelNode {
+  folder: Folder;
+  children: Folder[];
+}
+
+//Groups a flat Gmail label list into a parent → children tree.
+//Labels whose name contains "/" are children of the segment before the first slash.
+//If a parent label does not exist in the list as its own entry, it is not shown.
+function buildLabelTree(folders: Folder[]): LabelNode[] {
+  const roots = folders.filter(f => !f.name.includes('/'));
+  const children = folders.filter(f => f.name.includes('/'));
+  return roots.map(root => ({
+    folder: root,
+    children: children.filter(c => c.name.startsWith(root.name + '/')),
+  }));
+}
+
+//Chevron pointing right — used for a collapsed parent label.
+function ChevronRight() {
+  return (
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+      <polyline points="9 18 15 12 9 6" />
+    </svg>
+  );
+}
+
+//Chevron pointing down — used for an expanded parent label.
+function ChevronDown() {
+  return (
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+      <polyline points="6 9 12 15 18 9" />
+    </svg>
+  );
+}
+
 interface Props {
   open: PanelType;
 }
@@ -40,6 +77,9 @@ export default function SlidePanel({ open }: Props) {
   //fetched tracks which providers have already loaded successfully.
   //A ref is used because updating it must not trigger a re-render — it is bookkeeping only.
   const fetched = useRef(new Set<string>());
+
+  //expandedLabels tracks which Gmail parent label IDs are currently expanded.
+  const [expandedLabels, setExpandedLabels] = useState<Set<string>>(new Set());
 
   //Only fetch when the panel opens for a provider that has not been fetched yet,
   //or when a previous fetch for that provider ended in an error.
@@ -78,6 +118,15 @@ export default function SlidePanel({ open }: Props) {
         .finally(() => setLoading(null));
     }
   }, [open]);
+
+  //Toggles a Gmail parent label open or closed.
+  function toggleLabel(id: string) {
+    setExpandedLabels(prev => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  }
 
   function handleGmailLabel(name: string) {
     setProvider('gmail');
@@ -132,32 +181,102 @@ export default function SlidePanel({ open }: Props) {
             <p style={{ padding: '12px 16px', fontSize: 13, color: '#dc2626', margin: 0 }}>{activeError}</p>
           )}
 
-          {/* Gmail labels */}
-          {!isLoading && open === 'gmail' && gmailFolders.map(folder => (
-            <button
-              key={folder.id}
-              onClick={() => handleGmailLabel(folder.name)}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                width: '100%',
-                padding: '9px 16px',
-                background: 'none',
-                border: 'none',
-                cursor: 'pointer',
-                textAlign: 'left',
-                fontSize: 13,
-                color: '#374151',
-              }}
-              onMouseEnter={e => (e.currentTarget.style.backgroundColor = '#f9fafb')}
-              onMouseLeave={e => (e.currentTarget.style.backgroundColor = 'transparent')}
-            >
-              <span>{folder.name}</span>
-              {folder.message_count !== undefined && folder.message_count > 0 && (
-                <span style={{ fontSize: 11, color: '#9ca3af' }}>{folder.message_count}</span>
-              )}
-            </button>
+          {/* Gmail labels — grouped into a collapsible tree */}
+          {!isLoading && open === 'gmail' && buildLabelTree(gmailFolders).map(({ folder, children }) => (
+            <div key={folder.id}>
+
+              {/* Parent label row */}
+              <div style={{ display: 'flex', alignItems: 'center' }}>
+                {children.length > 0 ? (
+                  <>
+                    {/* Chevron toggle — expands/collapses the children */}
+                    <button
+                      onClick={() => toggleLabel(folder.id)}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        width: 28,
+                        flexShrink: 0,
+                        padding: '9px 0 9px 12px',
+                        background: 'none',
+                        border: 'none',
+                        cursor: 'pointer',
+                        color: '#9ca3af',
+                      }}
+                    >
+                      {expandedLabels.has(folder.id) ? <ChevronDown /> : <ChevronRight />}
+                    </button>
+
+                    {/* Label name — navigates to this label */}
+                    <button
+                      onClick={() => handleGmailLabel(folder.name)}
+                      style={{
+                        flex: 1,
+                        padding: '9px 16px 9px 4px',
+                        background: 'none',
+                        border: 'none',
+                        cursor: 'pointer',
+                        textAlign: 'left',
+                        fontSize: 13,
+                        color: '#374151',
+                      }}
+                      onMouseEnter={e => (e.currentTarget.style.backgroundColor = '#f9fafb')}
+                      onMouseLeave={e => (e.currentTarget.style.backgroundColor = 'transparent')}
+                    >
+                      {folder.name}
+                    </button>
+                  </>
+                ) : (
+                  // No children — full-width navigation button
+                  <button
+                    onClick={() => handleGmailLabel(folder.name)}
+                    style={{
+                      flex: 1,
+                      display: 'flex',
+                      alignItems: 'center',
+                      padding: '9px 16px',
+                      background: 'none',
+                      border: 'none',
+                      cursor: 'pointer',
+                      textAlign: 'left',
+                      fontSize: 13,
+                      color: '#374151',
+                    }}
+                    onMouseEnter={e => (e.currentTarget.style.backgroundColor = '#f9fafb')}
+                    onMouseLeave={e => (e.currentTarget.style.backgroundColor = 'transparent')}
+                  >
+                    {folder.name}
+                  </button>
+                )}
+              </div>
+
+              {/* Child labels — only rendered when the parent is expanded */}
+              {expandedLabels.has(folder.id) && children.map(child => (
+                <button
+                  key={child.id}
+                  onClick={() => handleGmailLabel(child.name)}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    width: '100%',
+                    padding: '8px 16px 8px 40px',
+                    background: 'none',
+                    border: 'none',
+                    cursor: 'pointer',
+                    textAlign: 'left',
+                    fontSize: 13,
+                    color: '#6b7280',
+                  }}
+                  onMouseEnter={e => (e.currentTarget.style.backgroundColor = '#f9fafb')}
+                  onMouseLeave={e => (e.currentTarget.style.backgroundColor = 'transparent')}
+                >
+                  {/* Show only the part after the last slash */}
+                  {child.name.split('/').pop()}
+                </button>
+              ))}
+
+            </div>
           ))}
 
           {/* Outlook folders */}
