@@ -37,6 +37,13 @@ export default function AccountPanel({ onClose }: AccountPanelProps) {
   const [actionInProgress, setActionInProgress] = useState<string | null>(null);
   const panelRef = useRef<HTMLDivElement>(null);
 
+  //If authStatus is null when the panel opens (e.g. the initial app-load fetch failed),
+  //trigger a fresh fetch immediately so the user is not stuck on "Loading...".
+  useEffect(() => {
+    if (!authStatus) refresh();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   //Close the panel when the user clicks anywhere outside it.
   useEffect(() => {
     function handleMouseDown(e: MouseEvent) {
@@ -75,16 +82,15 @@ export default function AccountPanel({ onClose }: AccountPanelProps) {
       ref={panelRef}
       style={{
         position: 'absolute',
-        top: '100%',
-        right: 0,
+        bottom: 0,
+        left: 'calc(100% + 8px)',
         width: 320,
         backgroundColor: 'white',
         border: '1px solid #e0e0e0',
         borderRadius: 6,
         boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
         padding: 16,
-        zIndex: 100,
-        marginTop: 4,
+        zIndex: 200,
       }}
     >
       <p style={{ fontWeight: 600, fontSize: 13, marginBottom: 12, marginTop: 0 }}>

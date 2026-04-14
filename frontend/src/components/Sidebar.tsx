@@ -1,9 +1,11 @@
 //Sidebar.tsx
 //Icon-only navigation sidebar — nav links in the middle, Gmail/Outlook/Teams provider icons at the bottom.
 
+import { useState } from 'react';
 import type { CSSProperties } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useProvider } from '../context/ProviderContext';
+import AccountPanel from './AccountPanel';
 
 const ACTIVE_ICON = '#5c5fc4';
 const INACTIVE_ICON = '#9ca3af';
@@ -58,6 +60,16 @@ function ChatIcon({ color }: { color: string }) {
   return (
     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
       <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" />
+    </svg>
+  );
+}
+
+//Person circle icon — Account
+function PersonIcon({ color }: { color: string }) {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2" />
+      <circle cx="12" cy="7" r="4" />
     </svg>
   );
 }
@@ -136,6 +148,7 @@ export default function Sidebar({ onPanelToggle, openPanel }: Props) {
   const { setProvider } = useProvider();
   const location = useLocation();
   const path = location.pathname;
+  const [accountOpen, setAccountOpen] = useState(false);
 
   //email-related paths all count as "inbox" being active
   const inboxActive = path === '/' || path.startsWith('/email/');
@@ -214,6 +227,19 @@ export default function Sidebar({ onPanelToggle, openPanel }: Props) {
         <Link to="/sync" title="Sync Inbox" style={navItemStyle(path === '/sync')}>
           <SyncIcon color={path === '/sync' ? ACTIVE_ICON : INACTIVE_ICON} />
         </Link>
+
+        {/* Account button — pushed to the bottom of the nav box */}
+        <div style={{ marginTop: 'auto', position: 'relative' }}>
+          <button
+            title="Account"
+            onMouseDown={e => e.stopPropagation()}
+            onClick={() => setAccountOpen(o => !o)}
+            style={navItemStyle(accountOpen)}
+          >
+            <PersonIcon color={accountOpen ? ACTIVE_ICON : INACTIVE_ICON} />
+          </button>
+          {accountOpen && <AccountPanel onClose={() => setAccountOpen(false)} />}
+        </div>
       </div>
 
     </div>
