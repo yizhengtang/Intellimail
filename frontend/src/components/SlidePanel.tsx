@@ -1,8 +1,10 @@
 //SlidePanel.tsx
 //Slide-out panel that appears to the right of the sidebar when a provider icon is clicked.
 //Shows Gmail labels, Outlook folders, or Teams chats depending on which provider is open.
+//Each provider's data is fetched once and cached for the lifetime of the component.
+//Re-fetching only happens if a previous attempt for that provider failed.
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useProvider } from '../context/ProviderContext';
 import * as gmailService from '../services/gmailService';
@@ -12,7 +14,6 @@ import type { Folder } from '../types/email';
 import type { TeamsChat } from '../types/teams';
 import { truncate } from '../utils/format';
 
-//Gmail system labels worth showing — same list as useFolders.
 const GMAIL_VISIBLE_SYSTEM_LABELS = ['INBOX', 'SENT', 'TRASH', 'DRAFT', 'STARRED'];
 
 type PanelType = 'gmail' | 'outlook' | 'teams' | null;
@@ -25,68 +26,80 @@ export default function SlidePanel({ open }: Props) {
   const { setProvider } = useProvider();
   const navigate = useNavigate();
 
-  const [folders, setFolders] = useState<Folder[]>([]);
-  const [chats, setChats] = useState<TeamsChat[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  //Separate state per provider so switching panels does not wipe the other's cached data.
+  const [gmailFolders, setGmailFolders] = useState<Folder[]>([]);
+  const [outlookFolders, setOutlookFolders] = useState<Folder[]>([]);
+  const [teamsChats, setTeamsChats] = useState<TeamsChat[]>([]);
 
-  //Fetch the correct data whenever the panel opens for a provider.
+  //loading tracks which provider is currently being fetched. null means idle.
+  const [loading, setLoading] = useState<PanelType>(null);
+
+  //errors holds the error message per provider so each provider's error is independent.
+  const [errors, setErrors] = useState<Partial<Record<NonNullable<PanelType>, string>>>({});
+
+  //fetched tracks which providers have already loaded successfully.
+  //A ref is used because updating it must not trigger a re-render — it is bookkeeping only.
+  const fetched = useRef(new Set<string>());
+
+  //Only fetch when the panel opens for a provider that has not been fetched yet,
+  //or when a previous fetch for that provider ended in an error.
   useEffect(() => {
     if (!open) return;
+    if (fetched.current.has(open) && !errors[open]) return;
 
-    setFolders([]);
-    setChats([]);
-    setError(null);
-    setLoading(true);
+    setLoading(open);
+    setErrors(prev => ({ ...prev, [open]: undefined }));
 
     if (open === 'gmail') {
       gmailService.getLabels()
-        .then(data => setFolders(
-          data.filter(f => f.type === 'user' || GMAIL_VISIBLE_SYSTEM_LABELS.includes(f.name))
-        ))
-        .catch(() => setError('Could not load Gmail labels. Make sure you are signed in.'))
-        .finally(() => setLoading(false));
+        .then(data => {
+          setGmailFolders(data.filter(f => f.type === 'user' || GMAIL_VISIBLE_SYSTEM_LABELS.includes(f.name)));
+          fetched.current.add('gmail');
+        })
+        .catch(() => setErrors(prev => ({ ...prev, gmail: 'Could not load Gmail labels. Make sure you are signed in.' })))
+        .finally(() => setLoading(null));
 
     } else if (open === 'outlook') {
       outlookService.getFolders()
-        .then(data => setFolders(data))
-        .catch(() => setError('Could not load Outlook folders. Make sure you are signed in.'))
-        .finally(() => setLoading(false));
+        .then(data => {
+          setOutlookFolders(data);
+          fetched.current.add('outlook');
+        })
+        .catch(() => setErrors(prev => ({ ...prev, outlook: 'Could not load Outlook folders. Make sure you are signed in.' })))
+        .finally(() => setLoading(null));
 
     } else if (open === 'teams') {
       listChats(20)
-        .then(data => setChats(data))
-        .catch(() => setError('Could not load Teams chats. Make sure you are signed in.'))
-        .finally(() => setLoading(false));
+        .then(data => {
+          setTeamsChats(data);
+          fetched.current.add('teams');
+        })
+        .catch(() => setErrors(prev => ({ ...prev, teams: 'Could not load Teams chats. Make sure you are signed in.' })))
+        .finally(() => setLoading(null));
     }
   }, [open]);
 
-  //Navigate to a Gmail label — sets provider and navigates to inbox filtered by folder name.
   function handleGmailLabel(name: string) {
     setProvider('gmail');
     navigate(`/?folder=${encodeURIComponent(name)}`);
   }
 
-  //Navigate to an Outlook folder.
   function handleOutlookFolder(name: string) {
     setProvider('outlook');
     navigate(`/?folder=${encodeURIComponent(name)}`);
   }
 
-  //Navigate to a Teams chat.
   function handleTeamsChat(chatId: string) {
     navigate(`/teams/${chatId}`);
   }
 
-  //Panel title for each provider.
+  const isLoading = loading === open;
+  const activeError = open ? errors[open] : undefined;
   const title = open === 'gmail' ? 'Gmail' : open === 'outlook' ? 'Outlook' : 'Teams';
-
-  //Accent colour per provider — matches the brand icon colours.
   const accent = open === 'gmail' ? '#EA4335' : open === 'outlook' ? '#0078D4' : '#6264A7';
 
   return (
     <>
-      {/* The panel itself — sits in the flex row, not overlapping */}
       <div style={{
         height: '100vh',
         width: open ? 220 : 0,
@@ -100,7 +113,6 @@ export default function SlidePanel({ open }: Props) {
         flexShrink: 0,
       }}>
 
-        {/* Panel header */}
         <div style={{
           padding: '18px 16px 12px',
           borderBottom: '1px solid #f3f4f6',
@@ -112,17 +124,16 @@ export default function SlidePanel({ open }: Props) {
           <span style={{ fontWeight: 600, fontSize: 14, color: '#111827' }}>{title}</span>
         </div>
 
-        {/* Panel content */}
         <div style={{ flex: 1, overflowY: 'auto', padding: '8px 0' }}>
-          {loading && (
+          {isLoading && (
             <p style={{ padding: '12px 16px', fontSize: 13, color: '#9ca3af', margin: 0 }}>Loading...</p>
           )}
-          {!loading && error && (
-            <p style={{ padding: '12px 16px', fontSize: 13, color: '#dc2626', margin: 0 }}>{error}</p>
+          {!isLoading && activeError && (
+            <p style={{ padding: '12px 16px', fontSize: 13, color: '#dc2626', margin: 0 }}>{activeError}</p>
           )}
 
           {/* Gmail labels */}
-          {!loading && open === 'gmail' && folders.map(folder => (
+          {!isLoading && open === 'gmail' && gmailFolders.map(folder => (
             <button
               key={folder.id}
               onClick={() => handleGmailLabel(folder.name)}
@@ -138,7 +149,6 @@ export default function SlidePanel({ open }: Props) {
                 textAlign: 'left',
                 fontSize: 13,
                 color: '#374151',
-                borderRadius: 0,
               }}
               onMouseEnter={e => (e.currentTarget.style.backgroundColor = '#f9fafb')}
               onMouseLeave={e => (e.currentTarget.style.backgroundColor = 'transparent')}
@@ -151,7 +161,7 @@ export default function SlidePanel({ open }: Props) {
           ))}
 
           {/* Outlook folders */}
-          {!loading && open === 'outlook' && folders.map(folder => (
+          {!isLoading && open === 'outlook' && outlookFolders.map(folder => (
             <button
               key={folder.id}
               onClick={() => handleOutlookFolder(folder.name)}
@@ -167,7 +177,6 @@ export default function SlidePanel({ open }: Props) {
                 textAlign: 'left',
                 fontSize: 13,
                 color: '#374151',
-                borderRadius: 0,
               }}
               onMouseEnter={e => (e.currentTarget.style.backgroundColor = '#f9fafb')}
               onMouseLeave={e => (e.currentTarget.style.backgroundColor = 'transparent')}
@@ -186,7 +195,7 @@ export default function SlidePanel({ open }: Props) {
           ))}
 
           {/* Teams chats */}
-          {!loading && open === 'teams' && chats.map(chat => (
+          {!isLoading && open === 'teams' && teamsChats.map(chat => (
             <button
               key={chat.id}
               onClick={() => handleTeamsChat(chat.id)}
@@ -200,7 +209,6 @@ export default function SlidePanel({ open }: Props) {
                 border: 'none',
                 cursor: 'pointer',
                 textAlign: 'left',
-                borderRadius: 0,
                 gap: 2,
               }}
               onMouseEnter={e => (e.currentTarget.style.backgroundColor = '#f9fafb')}
