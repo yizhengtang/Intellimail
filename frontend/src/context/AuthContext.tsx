@@ -20,8 +20,12 @@ export function AuthContextProvider({ children }: { children: ReactNode }) {
   const [authStatus, setAuthStatus] = useState<AuthStatus | null>(null);
 
   async function refresh() {
-    const updated = await getAuthStatus();
-    setAuthStatus(updated);
+    try {
+      const updated = await getAuthStatus();
+      setAuthStatus(updated);
+    } catch {
+      //Leave authStatus unchanged — panel will show whatever state it already has.
+    }
   }
 
   //Fetch once on app load.

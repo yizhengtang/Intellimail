@@ -1,20 +1,17 @@
 //Layout.tsx
-//App shell — renders the sidebar, slide-out panel, account button, and the active page via Outlet.
-//Search and compose live inside InboxPage, not here, because they are email-specific.
+//App shell — sidebar, slide-out panel, and the active page via Outlet.
+//Account button lives in Sidebar. Search and compose live in InboxPage.
 
 import { useState } from 'react';
 import { Outlet } from 'react-router-dom';
 import Sidebar from './Sidebar';
 import SlidePanel from './SlidePanel';
-import AccountPanel from './AccountPanel';
 
 type OpenPanel = 'gmail' | 'outlook' | 'teams' | null;
 
 //<Outlet /> is filled by React Router with the matched child route's element.
 //openPanel lives here so both Sidebar (sets it) and SlidePanel (reads it) can share it as siblings.
-//Clicking the same provider icon a second time toggles the panel closed.
 export default function Layout() {
-  const [accountOpen, setAccountOpen] = useState(false);
   const [openPanel, setOpenPanel] = useState<OpenPanel>(null);
 
   function handlePanelToggle(panel: OpenPanel) {
@@ -30,31 +27,6 @@ export default function Layout() {
       <SlidePanel open={openPanel} />
 
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{
-          padding: '12px 24px',
-          borderBottom: '1px solid #e0e0e0',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'flex-end',
-          position: 'relative',
-        }}>
-          <div style={{ position: 'relative' }}>
-            <button
-              onClick={() => setAccountOpen(o => !o)}
-              style={{
-                padding: '6px 14px',
-                cursor: 'pointer',
-                border: '1px solid #ccc',
-                borderRadius: 4,
-                backgroundColor: 'transparent',
-                fontSize: 13,
-              }}
-            >
-              Account
-            </button>
-            {accountOpen && <AccountPanel onClose={() => setAccountOpen(false)} />}
-          </div>
-        </div>
         <Outlet />
       </div>
     </div>
