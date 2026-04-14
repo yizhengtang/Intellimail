@@ -19,14 +19,14 @@ export default function Layout() {
   }
 
   return (
-    <div style={{ display: 'flex' }}>
+    <div style={{ display: 'flex', height: '100vh', overflow: 'hidden' }}>
       <div style={{ width: 64, flexShrink: 0 }}>
         <Sidebar onPanelToggle={handlePanelToggle} openPanel={openPanel} />
       </div>
 
       <SlidePanel open={openPanel} />
 
-      <div style={{ flex: 1, minWidth: 0 }}>
+      <div style={{ flex: 1, minWidth: 0, overflowY: 'auto' }}>
         <Outlet />
       </div>
     </div>
