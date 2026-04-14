@@ -85,9 +85,17 @@ export default function InboxPage() {
       : 'Inbox';
 
   return (
-    <div style={{ backgroundColor: '#f3f4f6', minHeight: '100vh', padding: '20px 24px' }}>
+    <div style={{ backgroundColor: '#f3f4f6', minHeight: '100%', padding: '0 24px 20px' }}>
 
-      {/* Search bar + Compose button */}
+      {/* Search bar + Compose button — sticky so it stays visible while scrolling */}
+      <div style={{
+        position: 'sticky',
+        top: 0,
+        backgroundColor: '#f3f4f6',
+        paddingTop: 20,
+        paddingBottom: 4,
+        zIndex: 10,
+      }}>
       <div style={{ display: 'flex', gap: 12, marginBottom: 24, alignItems: 'center' }}>
         <form onSubmit={handleSearch} style={{ flex: 1 }}>
           <div style={{ position: 'relative' }}>
@@ -151,6 +159,7 @@ export default function InboxPage() {
           Compose
         </Link>
       </div>
+      </div>{/* end sticky bar */}
 
       {/* Section header */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
