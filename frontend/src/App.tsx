@@ -4,6 +4,7 @@
 import { RouterProvider } from 'react-router-dom';
 import { ProviderContextProvider } from './context/ProviderContext';
 import { AuthContextProvider } from './context/AuthContext';
+import { ChatContextProvider } from './context/ChatContext';
 import router from './router';
 
 //AuthContextProvider fetches auth status once on app load and shares it via useAuth().
@@ -15,7 +16,9 @@ export default function App() {
   return (
     <AuthContextProvider>
       <ProviderContextProvider>
-        <RouterProvider router={router} />
+        <ChatContextProvider>
+          <RouterProvider router={router} />
+        </ChatContextProvider>
       </ProviderContextProvider>
     </AuthContextProvider>
   );
