@@ -1,5 +1,6 @@
 import os
 from fastapi import APIRouter, HTTPException, Query
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from typing import List, Optional
 from Gmail.gmail_api import (
@@ -14,6 +15,8 @@ from Gmail.gmail_api import (
     get_email_conversations,
     download_attachments,
     download_attachments_all,
+    get_attachment_list,
+    get_attachment_data,
     create_label,
     list_labels,
     get_label_details,
@@ -130,6 +133,32 @@ def download_all_thread_attachments(message_id: str):
     os.makedirs(DOWNLOADS_DIR, exist_ok=True)
     download_attachments_all(service, 'me', message_id, DOWNLOADS_DIR)
     return {"message": "All thread attachments downloaded", "download_dir": DOWNLOADS_DIR}
+
+
+#Returns the attachment metadata list for an email — id, filename, content_type, size.
+#The frontend uses this to render attachment chips and inline images.
+@router.get("/emails/{message_id}/attachments")
+def list_attachments(message_id: str):
+    service = get_service()
+    return get_attachment_list(service, message_id)
+
+
+#Streams a single attachment directly to the browser.
+#Images get Content-Disposition: inline so the browser renders them.
+#Everything else gets Content-Disposition: attachment so the browser downloads the file.
+@router.get("/emails/{message_id}/attachments/{attachment_id}")
+def stream_attachment(message_id: str, attachment_id: str):
+    service = get_service()
+    data, filename, content_type = get_attachment_data(service, message_id, attachment_id)
+    if content_type.startswith('image/'):
+        disposition = 'inline'
+    else:
+        disposition = f'attachment; filename="{filename}"'
+    return StreamingResponse(
+        iter([data]),
+        media_type=content_type,
+        headers={'Content-Disposition': disposition}
+    )
 
 
 # Trash

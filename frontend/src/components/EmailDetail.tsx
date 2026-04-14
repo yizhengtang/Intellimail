@@ -47,7 +47,23 @@ export default function EmailDetail({ email, isRead, onToggleRead, onReply, onRe
       <hr style={{ border: 'none', borderTop: '1px solid #e0e0e0', marginBottom: 16 }} />
 
       {email.body_type === 'html' || email.body_type === 'HTML' ? (
-        <div dangerouslySetInnerHTML={{ __html: email.body }} />
+        //Sandboxed iframe isolates the email HTML from the app.
+        //sandbox without allow-scripts means no JavaScript in the email can execute.
+        //allow-same-origin lets us read scrollHeight to auto-fit the iframe height.
+        <iframe
+          srcDoc={email.body}
+          title="Email content"
+          sandbox="allow-same-origin"
+          style={{ width: '100%', border: 'none', minHeight: 300, display: 'block' }}
+          onLoad={e => {
+            try {
+              const doc = e.currentTarget.contentDocument;
+              if (doc?.body) {
+                e.currentTarget.style.height = `${doc.body.scrollHeight + 32}px`;
+              }
+            } catch { /* sandbox may restrict access on some browsers */ }
+          }}
+        />
       ) : (
         <pre style={{ whiteSpace: 'pre-wrap', fontFamily: 'inherit' }}>{email.body}</pre>
       )}
