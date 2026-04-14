@@ -1,5 +1,6 @@
 //EmailList.tsx
-//Renders a list of EmailRow components. Handles loading, empty states, and batch selection.
+//Renders a list of EmailRow cards with a section header and batch selection bar.
+//The grey container background is set by the parent page (InboxPage).
 
 import { useState } from 'react';
 import type { EmailSummary } from '../types/email';
@@ -13,32 +14,21 @@ interface EmailListProps {
   batchActionLabel?: string;
 }
 
-//This component receives the email array and loading flag from the page.
-//It does not fetch data — it only renders what it is given.
-//When selectable is true, checkboxes appear and a batch action bar shows at the top.
 export default function EmailList({ emails, loading, selectable, onBatchAction, batchActionLabel }: EmailListProps) {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
-  //Toggle a single email's selection
   const toggleSelect = (id: string) => {
     setSelectedIds(prev => {
       const next = new Set(prev);
-      if (next.has(id)) {
-        next.delete(id);
-      } else {
-        next.add(id);
-      }
+      next.has(id) ? next.delete(id) : next.add(id);
       return next;
     });
   };
 
-  //Select all or deselect all
   const toggleAll = () => {
-    if (selectedIds.size === emails.length) {
-      setSelectedIds(new Set());
-    } else {
-      setSelectedIds(new Set(emails.map(e => e.id)));
-    }
+    setSelectedIds(
+      selectedIds.size === emails.length ? new Set() : new Set(emails.map(e => e.id))
+    );
   };
 
   const handleBatchAction = () => {
@@ -48,19 +38,24 @@ export default function EmailList({ emails, loading, selectable, onBatchAction, 
     }
   };
 
-  if (loading) return <p>Loading...</p>;
-  if (emails.length === 0) return <p>No emails found.</p>;
+  if (loading) {
+    return <p style={{ padding: '24px 0', color: '#9ca3af', fontSize: 14 }}>Loading...</p>;
+  }
+
+  if (emails.length === 0) {
+    return <p style={{ padding: '24px 0', color: '#9ca3af', fontSize: 14 }}>No emails found.</p>;
+  }
 
   return (
     <div>
+      {/* Batch selection bar — only shown when selectable is true */}
       {selectable && (
         <div style={{
           display: 'flex',
           alignItems: 'center',
           gap: 12,
-          padding: '8px 12px',
-          borderBottom: '1px solid #e0e0e0',
-          backgroundColor: '#f9f9f9',
+          padding: '10px 4px',
+          marginBottom: 8,
         }}>
           <input
             type="checkbox"
@@ -68,19 +63,20 @@ export default function EmailList({ emails, loading, selectable, onBatchAction, 
             onChange={toggleAll}
             style={{ cursor: 'pointer' }}
           />
-          <span style={{ fontSize: 14, color: '#555' }}>
+          <span style={{ fontSize: 13, color: '#6b7280' }}>
             {selectedIds.size > 0 ? `${selectedIds.size} selected` : 'Select all'}
           </span>
           {selectedIds.size > 0 && onBatchAction && (
             <button
               onClick={handleBatchAction}
               style={{
-                padding: '4px 12px',
+                padding: '4px 14px',
                 cursor: 'pointer',
-                border: '1px solid #ccc',
-                borderRadius: 4,
-                backgroundColor: 'transparent',
-                fontSize: 14,
+                border: '1px solid #d1d5db',
+                borderRadius: 6,
+                backgroundColor: '#ffffff',
+                fontSize: 13,
+                color: '#374151',
               }}
             >
               {batchActionLabel || 'Action'}
@@ -88,6 +84,7 @@ export default function EmailList({ emails, loading, selectable, onBatchAction, 
           )}
         </div>
       )}
+
       {emails.map(email => (
         <EmailRow
           key={email.id}

@@ -1,11 +1,11 @@
 //Layout.tsx
-//App shell — renders the sidebar, slide-out panel, search header, account button, and the active page via Outlet.
+//App shell — renders the sidebar, slide-out panel, account button, and the active page via Outlet.
+//Search and compose live inside InboxPage, not here, because they are email-specific.
 
 import { useState } from 'react';
 import { Outlet } from 'react-router-dom';
 import Sidebar from './Sidebar';
 import SlidePanel from './SlidePanel';
-import SearchBar from './SearchBar';
 import AccountPanel from './AccountPanel';
 
 type OpenPanel = 'gmail' | 'outlook' | 'teams' | null;
@@ -29,16 +29,15 @@ export default function Layout() {
 
       <SlidePanel open={openPanel} />
 
-      <div style={{ flex: 1 }}>
+      <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{
           padding: '12px 24px',
           borderBottom: '1px solid #e0e0e0',
           display: 'flex',
           alignItems: 'center',
-          justifyContent: 'space-between',
+          justifyContent: 'flex-end',
           position: 'relative',
         }}>
-          <SearchBar />
           <div style={{ position: 'relative' }}>
             <button
               onClick={() => setAccountOpen(o => !o)}
