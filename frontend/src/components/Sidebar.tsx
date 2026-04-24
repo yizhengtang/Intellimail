@@ -212,7 +212,7 @@ export default function Sidebar({ onPanelToggle, openPanel }: Props) {
 
       {/* Navigation icons — grey rounded section box */}
       <div style={{ ...sectionBox, flex: 1, justifyContent: 'flex-start' }}>
-        <Link to="/" title="Inbox" style={navItemStyle(inboxActive)}>
+        <Link to="/" title="Inbox" style={navItemStyle(inboxActive)} onClick={() => setProvider('unified')}>
           <EnvelopeIcon color={inboxActive ? ACTIVE_ICON : INACTIVE_ICON} />
         </Link>
         <Link to="/compose" title="Compose" style={navItemStyle(path === '/compose')}>

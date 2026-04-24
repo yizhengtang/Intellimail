@@ -1,13 +1,10 @@
 //EmailRow.tsx
-//Single email card — white rounded box with sender avatar, unread dot, subject, snippet, and date.
+//Single table row — columns are Sender, Message, Channel, Time.
 
 import { useNavigate } from 'react-router-dom';
 import type { EmailSummary } from '../types/email';
 import { formatDate, truncate } from '../utils/format';
 
-//A fixed palette of soft colors for the sender avatar.
-//The color is picked by the char code of the first letter of the sender name,
-//so the same sender always gets the same color.
 const AVATAR_COLORS = [
   '#6366f1', '#8b5cf6', '#ec4899', '#ef4444',
   '#f97316', '#22c55e', '#06b6d4', '#3b82f6', '#f59e0b',
@@ -27,7 +24,8 @@ interface EmailRowProps {
 export default function EmailRow({ email, selectable, selected, onSelect }: EmailRowProps) {
   const navigate = useNavigate();
 
-  const senderName = email.from_name || email.from || '?';
+  const rawSender = email.from_name || email.from || '?';
+  const senderName = rawSender.replace(/<[^>]*>/g, '').trim() || rawSender;
   const initial = senderName[0].toUpperCase();
   const color = avatarColor(senderName);
   const isUnread = !email.is_read;
@@ -38,17 +36,14 @@ export default function EmailRow({ email, selectable, selected, onSelect }: Emai
       style={{
         display: 'flex',
         alignItems: 'center',
-        gap: 12,
         padding: '12px 16px',
-        backgroundColor: '#ffffff',
-        borderRadius: 12,
-        marginBottom: 8,
-        boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
+        borderBottom: '1px solid #f3f4f6',
         cursor: 'pointer',
-        transition: 'box-shadow 150ms ease',
+        backgroundColor: '#ffffff',
+        transition: 'background-color 120ms ease',
       }}
-      onMouseEnter={e => (e.currentTarget.style.boxShadow = '0 2px 8px rgba(0,0,0,0.10)')}
-      onMouseLeave={e => (e.currentTarget.style.boxShadow = '0 1px 3px rgba(0,0,0,0.06)')}
+      onMouseEnter={e => (e.currentTarget.style.backgroundColor = '#f9fafb')}
+      onMouseLeave={e => (e.currentTarget.style.backgroundColor = '#ffffff')}
     >
       {selectable && (
         <input
@@ -56,61 +51,64 @@ export default function EmailRow({ email, selectable, selected, onSelect }: Emai
           checked={selected || false}
           onChange={() => onSelect?.(email.id)}
           onClick={e => e.stopPropagation()}
-          style={{ cursor: 'pointer', flexShrink: 0 }}
+          style={{ cursor: 'pointer', marginRight: 12, flexShrink: 0 }}
         />
       )}
 
-      {/* Blue dot — visible only for unread emails */}
-      <div style={{
-        width: 8,
-        height: 8,
-        borderRadius: '50%',
-        backgroundColor: isUnread ? '#3b82f6' : 'transparent',
-        flexShrink: 0,
-      }} />
-
-      {/* Sender avatar — colored circle with first initial */}
-      <div style={{
-        width: 38,
-        height: 38,
-        borderRadius: '50%',
-        backgroundColor: color,
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        color: '#ffffff',
-        fontWeight: 700,
-        fontSize: 15,
-        flexShrink: 0,
-      }}>
-        {initial}
-      </div>
-
-      {/* Email content */}
-      <div style={{ flex: 1, minWidth: 0 }}>
+      {/* Sender column — 220px */}
+      <div style={{ width: 220, display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0, minWidth: 0 }}>
+        {/* Unread dot */}
         <div style={{
-          fontSize: 14,
+          width: 7,
+          height: 7,
+          borderRadius: '50%',
+          backgroundColor: isUnread ? '#3b82f6' : 'transparent',
+          flexShrink: 0,
+        }} />
+        {/* Avatar */}
+        <div style={{
+          width: 32,
+          height: 32,
+          borderRadius: '50%',
+          backgroundColor: color,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          color: '#ffffff',
+          fontWeight: 700,
+          fontSize: 13,
+          flexShrink: 0,
+        }}>
+          {initial}
+        </div>
+        {/* Name */}
+        <span style={{
+          fontSize: 13,
           fontWeight: isUnread ? 700 : 500,
           color: '#111827',
-          marginBottom: 2,
           whiteSpace: 'nowrap',
           overflow: 'hidden',
           textOverflow: 'ellipsis',
         }}>
           {senderName}
-        </div>
-        <div style={{
+        </span>
+      </div>
+
+      {/* Message column — flex:1 */}
+      <div style={{ flex: 1, minWidth: 0, padding: '0 16px', display: 'flex', alignItems: 'baseline', gap: 6 }}>
+        <span style={{
           fontSize: 13,
           fontWeight: isUnread ? 600 : 400,
           color: '#374151',
-          marginBottom: 2,
           whiteSpace: 'nowrap',
           overflow: 'hidden',
           textOverflow: 'ellipsis',
+          flexShrink: 0,
+          maxWidth: '40%',
         }}>
           {email.subject}
-        </div>
-        <div style={{
+        </span>
+        <span style={{
           fontSize: 12,
           color: '#9ca3af',
           whiteSpace: 'nowrap',
@@ -118,11 +116,30 @@ export default function EmailRow({ email, selectable, selected, onSelect }: Emai
           textOverflow: 'ellipsis',
         }}>
           {truncate(email.snippet || '', 80)}
-        </div>
+        </span>
       </div>
 
-      {/* Date */}
-      <div style={{ fontSize: 12, color: '#9ca3af', whiteSpace: 'nowrap', flexShrink: 0 }}>
+      {/* Channel column — 110px */}
+      <div style={{ width: 110, flexShrink: 0 }}>
+        {email.provider && (
+          <div style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 5,
+            fontSize: 11,
+            fontWeight: 600,
+            color: '#ffffff',
+            backgroundColor: email.provider === 'gmail' ? '#EA4335' : '#0078D4',
+            borderRadius: 6,
+            padding: '3px 9px',
+          }}>
+            {email.provider === 'gmail' ? 'Gmail' : 'Outlook'}
+          </div>
+        )}
+      </div>
+
+      {/* Time column — 80px */}
+      <div style={{ width: 80, fontSize: 12, color: '#9ca3af', textAlign: 'right', flexShrink: 0 }}>
         {formatDate(email.date)}
       </div>
     </div>

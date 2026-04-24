@@ -1,5 +1,5 @@
 //InboxPage.tsx
-//Main inbox view — grey background with a search + compose bar at the top and email cards below.
+//Main inbox view — fills the viewport exactly, with a scrollable email list that fades at the bottom.
 
 import { useState } from 'react';
 import { useSearchParams, useNavigate, Link } from 'react-router-dom';
@@ -64,15 +64,22 @@ export default function InboxPage() {
   if (authStatus) {
     if (provider === 'gmail' && !authStatus.gmail.connected) {
       return (
-        <div style={{ padding: 24, backgroundColor: '#f3f4f6', minHeight: '100vh' }}>
+        <div style={{ padding: 24, height: '100%', backgroundColor: '#f3f4f6' }}>
           <p style={{ color: '#6b7280' }}>Gmail is not connected. Open the Account panel to connect.</p>
         </div>
       );
     }
     if (provider === 'outlook' && !authStatus.outlook.connected) {
       return (
-        <div style={{ padding: 24, backgroundColor: '#f3f4f6', minHeight: '100vh' }}>
+        <div style={{ padding: 24, height: '100%', backgroundColor: '#f3f4f6' }}>
           <p style={{ color: '#6b7280' }}>Outlook is not connected. Open the Account panel to connect.</p>
+        </div>
+      );
+    }
+    if (provider === 'unified' && !authStatus.gmail.connected && !authStatus.outlook.connected) {
+      return (
+        <div style={{ padding: 24, height: '100%', backgroundColor: '#f3f4f6' }}>
+          <p style={{ color: '#6b7280' }}>No accounts connected. Open the Account panel to connect Gmail or Outlook.</p>
         </div>
       );
     }
@@ -82,111 +89,127 @@ export default function InboxPage() {
     ? `Results for "${query}"`
     : folder
       ? folder
-      : 'Inbox';
+      : provider === 'unified'
+        ? 'All Inboxes'
+        : 'Inbox';
 
   return (
-    <div style={{ backgroundColor: '#f3f4f6', minHeight: '100%', padding: '0 24px 20px' }}>
+    //Flex column that fills the full available height — no page-level scroll
+    <div style={{
+      display: 'flex',
+      flexDirection: 'column',
+      height: '100%',
+      backgroundColor: '#f3f4f6',
+      overflow: 'hidden',
+    }}>
 
-      {/* Search bar + Compose button — sticky so it stays visible while scrolling */}
-      <div style={{
-        position: 'sticky',
-        top: 0,
-        backgroundColor: '#f3f4f6',
-        paddingTop: 20,
-        paddingBottom: 4,
-        zIndex: 10,
-      }}>
-      <div style={{ display: 'flex', gap: 12, marginBottom: 24, alignItems: 'center' }}>
-        <form onSubmit={handleSearch} style={{ flex: 1 }}>
-          <div style={{ position: 'relative' }}>
-            {/* Magnifying glass icon */}
-            <svg
-              width="16" height="16"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="#9ca3af"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              style={{ position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }}
-            >
-              <circle cx="11" cy="11" r="8" />
-              <line x1="21" y1="21" x2="16.65" y2="16.65" />
+      {/* Top bar — search + compose, fixed height, never scrolls away */}
+      <div style={{ padding: '20px 24px 0', flexShrink: 0 }}>
+        <div style={{ display: 'flex', gap: 12, marginBottom: 16, alignItems: 'center' }}>
+          <form onSubmit={handleSearch} style={{ flex: 1 }}>
+            <div style={{ position: 'relative' }}>
+              <svg
+                width="16" height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="#9ca3af"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                style={{ position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }}
+              >
+                <circle cx="11" cy="11" r="8" />
+                <line x1="21" y1="21" x2="16.65" y2="16.65" />
+              </svg>
+              <input
+                type="text"
+                placeholder="Search emails, contacts or labels"
+                value={searchInput}
+                onChange={e => setSearchInput(e.target.value)}
+                style={{
+                  width: '100%',
+                  padding: '10px 16px 10px 40px',
+                  border: '1px solid #e5e7eb',
+                  borderRadius: 10,
+                  fontSize: 14,
+                  backgroundColor: '#ffffff',
+                  color: '#111827',
+                  outline: 'none',
+                  boxSizing: 'border-box',
+                }}
+              />
+            </div>
+          </form>
+
+          <Link
+            to="/compose"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8,
+              padding: '10px 20px',
+              backgroundColor: '#111827',
+              color: '#ffffff',
+              borderRadius: 10,
+              textDecoration: 'none',
+              fontSize: 14,
+              fontWeight: 600,
+              whiteSpace: 'nowrap',
+              flexShrink: 0,
+            }}
+          >
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" />
+              <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" />
             </svg>
-            <input
-              type="text"
-              placeholder="Search emails, contacts or labels"
-              value={searchInput}
-              onChange={e => setSearchInput(e.target.value)}
-              style={{
-                width: '100%',
-                padding: '10px 16px 10px 40px',
-                border: '1px solid #e5e7eb',
-                borderRadius: 10,
-                fontSize: 14,
-                backgroundColor: '#ffffff',
-                color: '#111827',
-                outline: 'none',
-                boxSizing: 'border-box',
-              }}
-            />
-          </div>
-        </form>
+            Compose
+          </Link>
+        </div>
 
-        {/* Compose button */}
-        <Link
-          to="/compose"
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 8,
-            padding: '10px 20px',
-            backgroundColor: '#111827',
-            color: '#ffffff',
-            borderRadius: 10,
-            textDecoration: 'none',
-            fontSize: 14,
-            fontWeight: 600,
-            whiteSpace: 'nowrap',
-            flexShrink: 0,
-          }}
-        >
-          {/* Pencil icon */}
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" />
-            <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" />
-          </svg>
-          Compose
-        </Link>
-      </div>
-      </div>{/* end sticky bar */}
+        {/* Section header */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+          <span style={{ fontSize: 15, fontWeight: 700, color: '#111827' }}>{sectionLabel}</span>
+          {!isSearching && (
+            <span style={{
+              fontSize: 12,
+              fontWeight: 600,
+              color: '#6b7280',
+              backgroundColor: '#e5e7eb',
+              borderRadius: 20,
+              padding: '1px 8px',
+            }}>
+              {emails.length}
+            </span>
+          )}
+        </div>
 
-      {/* Section header */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
-        <span style={{ fontSize: 15, fontWeight: 700, color: '#111827' }}>{sectionLabel}</span>
-        {!isSearching && (
-          <span style={{
-            fontSize: 12,
-            fontWeight: 600,
-            color: '#6b7280',
-            backgroundColor: '#e5e7eb',
-            borderRadius: 20,
-            padding: '1px 8px',
-          }}>
-            {emails.length}
-          </span>
-        )}
+        {error && <p style={{ color: '#dc2626', fontSize: 14, marginBottom: 8 }}>{error}</p>}
       </div>
 
-      {error && <p style={{ color: '#dc2626', fontSize: 14 }}>{error}</p>}
+      {/* Scrollable email list — flex: 1 so it fills the remaining height */}
+      <div style={{ flex: 1, minHeight: 0, position: 'relative' }}>
+        <div style={{ height: '100%', overflowY: 'auto', padding: '0 24px' }}>
+          <EmailList
+            emails={emails}
+            loading={loading}
+            selectable={!isSearching}
+            onBatchAction={isTrash ? handleBatchRestore : handleBatchTrash}
+            batchActionLabel={isTrash ? 'Restore' : 'Trash'}
+          />
+        </div>
 
-      <EmailList
-        emails={emails}
-        loading={loading}
-        selectable={!isSearching}
-        onBatchAction={isTrash ? handleBatchRestore : handleBatchTrash}
-        batchActionLabel={isTrash ? 'Restore' : 'Trash'}
-      />
+        {/* Fade overlay at the bottom of the list */}
+        <div style={{
+          position: 'absolute',
+          bottom: 0,
+          left: 0,
+          right: 0,
+          height: 80,
+          background: 'linear-gradient(to bottom, transparent, #f3f4f6)',
+          pointerEvents: 'none',
+        }} />
+      </div>
+
     </div>
   );
 }
