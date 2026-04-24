@@ -30,11 +30,14 @@ export function useEmails(folder?: string, maxResults: number = 10) {
         setEmails(data.map(e => ({ ...e, provider: 'outlook' as const })));
 
       } else {
-        //fetch from both providers in parallel
-        const [gmailData, outlookData] = await Promise.all([
+        //fetch from both providers in parallel — allSettled so one failure doesn't block the other
+        const [gmailResult, outlookResult] = await Promise.allSettled([
           gmailService.getEmails(folder || 'INBOX', maxResults),
           outlookService.getEmails(folder || 'inbox', maxResults),
         ]);
+
+        const gmailData = gmailResult.status === 'fulfilled' ? gmailResult.value : [];
+        const outlookData = outlookResult.status === 'fulfilled' ? outlookResult.value : [];
 
         const merged = [
           ...gmailData.map(e => ({ ...e, provider: 'gmail' as const })),
