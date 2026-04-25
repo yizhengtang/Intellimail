@@ -5,6 +5,7 @@
 
 import os
 import json
+import datetime
 from openai import OpenAI
 
 _client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
@@ -88,10 +89,11 @@ def categorize_email(email_text: str) -> str:
 #the output in markdown code fences which breaks json.loads().
 #Returns a list of dicts, each with: type, date (ISO 8601 or empty string), description.
 def extract_events(email_text: str) -> list[dict]:
+    today = datetime.date.today().isoformat()
     response = _client.chat.completions.create(
         model="gpt-4o-mini",
         messages=[
-            {"role": "system", "content": "You are an event extraction assistant. Extract all events, meetings, dates, deadlines, and action items from the email. Return a JSON object with an 'events' key containing a list of objects. Each object must have: type (one of: meeting, deadline, action_item, reminder), date (ISO 8601 format, or empty string if not specified), description (a short description of the event)."},
+            {"role": "system", "content": f"You are an event extraction assistant. Today's date is {today}. Use this to resolve relative date references such as 'tomorrow', 'next week', or 'Friday' into exact dates. Extract all events, meetings, dates, deadlines, and action items from the email. Return a JSON object with an 'events' key containing a list of objects. Each object must have exactly these fields: type (one of: meeting, deadline, action_item, reminder), date (if no time: YYYY-MM-DD format. If a time is known: YYYY-MM-DDTHH:MM in 24-hour format. If no date at all: empty string), description (a short description of the event). Do not include seconds or timezone suffixes in the date field."},
             {"role": "user", "content": f"Extract all events from the following email.\n\n<email>\n{email_text}\n</email>"}
         ],
         temperature=0,

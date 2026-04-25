@@ -23,7 +23,8 @@ def init_db():
             event_time      TEXT,
             description     TEXT,
             provider        TEXT NOT NULL,
-            source_email_id TEXT NOT NULL
+            source_email_id TEXT NOT NULL,
+            sender_name     TEXT
         )
     ''')
     conn.commit()

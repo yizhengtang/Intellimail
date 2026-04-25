@@ -173,11 +173,11 @@ def events(provider: str, message_id: str):
     email = _fetch_email(provider, message_id)
     text = extract_text(email)
     extracted = extract_events(text)
+    sender_name = email.get("from_name") or email.get("from", "")
     for event in extracted:
         raw_date = event.get("date", "")
         if not raw_date:
             continue
-        #ISO 8601 date may include time — split on T to separate them.
         parts = raw_date.split("T")
         event_date = parts[0]
         event_time = parts[1][:5] if len(parts) > 1 else None
@@ -188,6 +188,7 @@ def events(provider: str, message_id: str):
             description=event.get("type"),
             provider=provider,
             source_email_id=message_id,
+            sender_name=sender_name,
         )
     return {"events": extracted}
 

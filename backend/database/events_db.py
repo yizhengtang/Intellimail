@@ -5,12 +5,12 @@ from database.db import get_db
 
 #Inserts one event row and returns the new row ID.
 def create_event(title: str, event_date: str, provider: str, source_email_id: str,
-                 event_time: str = None, description: str = None) -> int:
+                 event_time: str = None, description: str = None, sender_name: str = None) -> int:
     conn = get_db()
     cursor = conn.execute(
-        '''INSERT INTO events (title, event_date, event_time, description, provider, source_email_id)
-           VALUES (?, ?, ?, ?, ?, ?)''',
-        (title, event_date, event_time, description, provider, source_email_id)
+        '''INSERT INTO events (title, event_date, event_time, description, provider, source_email_id, sender_name)
+           VALUES (?, ?, ?, ?, ?, ?, ?)''',
+        (title, event_date, event_time, description, provider, source_email_id, sender_name)
     )
     conn.commit()
     new_id = cursor.lastrowid

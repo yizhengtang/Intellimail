@@ -248,6 +248,12 @@ export default function CalendarPage() {
               </p>
             )}
 
+            {selectedEvent.sender_name && (
+              <p style={{ fontSize: 13, color: '#6b7280', margin: '0 0 4px' }}>
+                👤 {selectedEvent.sender_name}
+              </p>
+            )}
+
             {selectedEvent.description && (
               <p style={{ fontSize: 13, color: '#6b7280', margin: '0 0 16px', textTransform: 'capitalize' }}>
                 Type: {selectedEvent.description.replace('_', ' ')}

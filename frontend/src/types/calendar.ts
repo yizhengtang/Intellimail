@@ -9,4 +9,5 @@ export interface CalendarEvent {
   description?: string;      // event type: meeting | deadline | action_item | reminder
   provider: 'gmail' | 'outlook' | 'teams';
   source_email_id: string;
+  sender_name?: string;
 }
