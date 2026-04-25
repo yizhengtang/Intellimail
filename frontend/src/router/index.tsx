@@ -11,6 +11,7 @@ import ChatPage from '../pages/ChatPage';
 import SyncPage from '../pages/SyncPage';
 import TeamsPage from '../pages/TeamsPage';
 import TeamsChatPage from '../pages/TeamsChatPage';
+import CalendarPage from '../pages/CalendarPage';
 
 //there are eight routes: 1. / (inbox) 2. /email/:provider/:id 3. /compose 4. /drafts
 //5. /chat 6. /sync 7. /teams (chat list) 8. /teams/:chatId (single chat)
@@ -27,6 +28,7 @@ const router = createBrowserRouter([
       { path: '/sync', element: <SyncPage /> },
       { path: '/teams', element: <TeamsPage /> },
       { path: '/teams/:chatId', element: <TeamsChatPage /> },
+      { path: '/calendar', element: <CalendarPage /> },
     ],
   },
 ]);
