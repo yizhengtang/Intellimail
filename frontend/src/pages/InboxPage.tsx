@@ -1,7 +1,7 @@
 //InboxPage.tsx
 //Main inbox view — fills the viewport exactly, with a scrollable email list that fades at the bottom.
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useSearchParams, useNavigate, Link } from 'react-router-dom';
 import { useEmails } from '../hooks/useEmails';
 import { useSearch } from '../hooks/useSearch';
@@ -10,6 +10,8 @@ import { useAuth } from '../context/AuthContext';
 import * as gmailService from '../services/gmailService';
 import * as outlookService from '../services/outlookService';
 import EmailList from '../components/EmailList';
+
+const PER_PAGE_OPTIONS = [10, 20, 30];
 
 //This page reads two URL search params:
 //  ?q=     — search query (shows search results instead of normal inbox)
@@ -25,18 +27,31 @@ export default function InboxPage() {
   const { provider } = useProvider();
   const { authStatus } = useAuth();
 
-  //Local state for the search input — keeps the input in sync with the ?q= URL param.
   const [searchInput, setSearchInput] = useState(query);
+  const [page, setPage] = useState(1);
+  const [perPage, setPerPage] = useState(10);
 
-  const inbox = useEmails(folder);
+  //Fetch 30 emails so client-side pagination has enough data.
+  const inbox = useEmails(folder, 30);
   const search = useSearch(query);
 
   const isSearching = query.length > 0;
-  const emails = isSearching ? search.results : inbox.emails;
+  const allEmails = isSearching ? search.results : inbox.emails;
   const loading = isSearching ? search.loading : inbox.loading;
   const error = isSearching ? search.error : inbox.error;
 
   const isTrash = folder === 'TRASH' || folder === 'Deleted Items';
+
+  //Reset to page 1 whenever the email list changes.
+  useEffect(() => {
+    setPage(1);
+  }, [provider, folder, query, perPage]);
+
+  const totalEmails = allEmails.length;
+  const totalPages = Math.ceil(totalEmails / perPage);
+  const startIndex = (page - 1) * perPage;
+  const endIndex = Math.min(startIndex + perPage, totalEmails);
+  const paginatedEmails = allEmails.slice(startIndex, endIndex);
 
   function handleSearch(e: { preventDefault(): void }) {
     e.preventDefault();
@@ -94,7 +109,6 @@ export default function InboxPage() {
         : 'Inbox';
 
   return (
-    //Flex column that fills the full available height — no page-level scroll
     <div style={{
       display: 'flex',
       flexDirection: 'column',
@@ -103,7 +117,7 @@ export default function InboxPage() {
       overflow: 'hidden',
     }}>
 
-      {/* Top bar — search + compose, fixed height, never scrolls away */}
+      {/* Top bar — search + compose */}
       <div style={{ padding: '20px 24px 0', flexShrink: 0 }}>
         <div style={{ display: 'flex', gap: 12, marginBottom: 16, alignItems: 'center' }}>
           <form onSubmit={handleSearch} style={{ flex: 1 }}>
@@ -178,7 +192,7 @@ export default function InboxPage() {
               borderRadius: 20,
               padding: '1px 8px',
             }}>
-              {emails.length}
+              {totalEmails}
             </span>
           )}
         </div>
@@ -186,11 +200,11 @@ export default function InboxPage() {
         {error && <p style={{ color: '#dc2626', fontSize: 14, marginBottom: 8 }}>{error}</p>}
       </div>
 
-      {/* Scrollable email list — flex: 1 so it fills the remaining height */}
+      {/* Scrollable email list */}
       <div style={{ flex: 1, minHeight: 0, position: 'relative' }}>
         <div style={{ height: '100%', overflowY: 'auto', padding: '0 24px' }}>
           <EmailList
-            emails={emails}
+            emails={paginatedEmails}
             loading={loading}
             selectable={!isSearching}
             onBatchAction={isTrash ? handleBatchRestore : handleBatchTrash}
@@ -204,11 +218,95 @@ export default function InboxPage() {
           bottom: 0,
           left: 0,
           right: 0,
-          height: 80,
+          height: 60,
           background: 'linear-gradient(to bottom, transparent, #f3f4f6)',
           pointerEvents: 'none',
         }} />
       </div>
+
+      {/* Pagination bar */}
+      {!loading && totalEmails > 0 && (
+        <div style={{
+          flexShrink: 0,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          padding: '10px 24px',
+          borderTop: '1px solid #e5e7eb',
+          backgroundColor: '#ffffff',
+          fontSize: 13,
+          color: '#6b7280',
+        }}>
+          {/* Results per page selector */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span>Results per page</span>
+            <select
+              value={perPage}
+              onChange={e => setPerPage(Number(e.target.value))}
+              style={{
+                fontSize: 13,
+                color: '#374151',
+                border: '1px solid #e5e7eb',
+                borderRadius: 6,
+                padding: '2px 6px',
+                cursor: 'pointer',
+                backgroundColor: '#ffffff',
+              }}
+            >
+              {PER_PAGE_OPTIONS.map(n => (
+                <option key={n} value={n}>{n}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* Page range + navigation arrows */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <span>{startIndex + 1}–{endIndex} of {totalEmails}</span>
+            <div style={{ display: 'flex', gap: 4 }}>
+              <button
+                onClick={() => setPage(p => Math.max(1, p - 1))}
+                disabled={page === 1}
+                style={{
+                  width: 28,
+                  height: 28,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  border: '1px solid #e5e7eb',
+                  borderRadius: 6,
+                  backgroundColor: '#ffffff',
+                  cursor: page === 1 ? 'not-allowed' : 'pointer',
+                  color: page === 1 ? '#d1d5db' : '#374151',
+                }}
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="15 18 9 12 15 6" />
+                </svg>
+              </button>
+              <button
+                onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+                disabled={page === totalPages}
+                style={{
+                  width: 28,
+                  height: 28,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  border: '1px solid #e5e7eb',
+                  borderRadius: 6,
+                  backgroundColor: '#ffffff',
+                  cursor: page === totalPages ? 'not-allowed' : 'pointer',
+                  color: page === totalPages ? '#d1d5db' : '#374151',
+                }}
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="9 18 15 12 9 6" />
+                </svg>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   );

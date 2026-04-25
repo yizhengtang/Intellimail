@@ -26,7 +26,7 @@ export default function Layout() {
 
       <SlidePanel open={openPanel} />
 
-      <div style={{ flex: 1, minWidth: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+      <div style={{ flex: 1, minWidth: 0, overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>
         <Outlet />
       </div>
     </div>
