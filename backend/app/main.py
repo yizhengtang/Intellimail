@@ -5,7 +5,8 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.routers import gmail, outlook, ai, teams, auth
+from app.routers import gmail, outlook, ai, teams, auth, calendar
+from database.db import init_db
 
 app = FastAPI(
     title="AI Inbox Manager",
@@ -28,6 +29,9 @@ app.include_router(outlook.router, prefix="/outlook", tags=["Outlook"])
 app.include_router(ai.router, prefix="/ai", tags=["AI"])
 app.include_router(teams.router, prefix="/teams", tags=["Teams"])
 app.include_router(auth.router, prefix="/auth", tags=["Auth"])
+app.include_router(calendar.router, prefix="/events", tags=["Calendar"])
+
+init_db()
 
 @app.get("/")
 def root():
