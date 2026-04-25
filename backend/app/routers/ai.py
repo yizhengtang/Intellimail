@@ -34,6 +34,7 @@ from ai.ingestion import extract_text, ingest_folder
 from ai.retrieval import retrieve_context
 from ai.vector_store import get_collection, document_exists, delete_document, add_document
 from ai.embeddings import embed_text
+from database.events_db import create_event
 
 router = APIRouter()
 
@@ -171,7 +172,24 @@ def categorize(provider: str, message_id: str):
 def events(provider: str, message_id: str):
     email = _fetch_email(provider, message_id)
     text = extract_text(email)
-    return {"events": extract_events(text)}
+    extracted = extract_events(text)
+    for event in extracted:
+        raw_date = event.get("date", "")
+        if not raw_date:
+            continue
+        #ISO 8601 date may include time — split on T to separate them.
+        parts = raw_date.split("T")
+        event_date = parts[0]
+        event_time = parts[1][:5] if len(parts) > 1 else None
+        create_event(
+            title=event.get("description", "Untitled Event"),
+            event_date=event_date,
+            event_time=event_time,
+            description=event.get("type"),
+            provider=provider,
+            source_email_id=message_id,
+        )
+    return {"events": extracted}
 
 @router.post("/emails/{provider}/{message_id}/reply")
 def reply(provider: str, message_id: str):
