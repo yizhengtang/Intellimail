@@ -213,6 +213,9 @@ export default function SlidePanel({ open }: Props) {
                       onClick={() => handleGmailLabel(folder.name)}
                       style={{
                         flex: 1,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
                         padding: '9px 16px 9px 4px',
                         background: 'none',
                         border: 'none',
@@ -224,7 +227,16 @@ export default function SlidePanel({ open }: Props) {
                       onMouseEnter={e => (e.currentTarget.style.backgroundColor = '#f9fafb')}
                       onMouseLeave={e => (e.currentTarget.style.backgroundColor = 'transparent')}
                     >
-                      {folder.name}
+                      <span>{folder.name}</span>
+                      {folder.unread_count !== undefined && folder.unread_count > 0 && (
+                        <span style={{
+                          fontSize: 11,
+                          color: '#ffffff',
+                          backgroundColor: '#EA4335',
+                          borderRadius: 10,
+                          padding: '1px 6px',
+                        }}>{folder.unread_count}</span>
+                      )}
                     </button>
                   </>
                 ) : (
@@ -235,6 +247,7 @@ export default function SlidePanel({ open }: Props) {
                       flex: 1,
                       display: 'flex',
                       alignItems: 'center',
+                      justifyContent: 'space-between',
                       padding: '9px 16px',
                       background: 'none',
                       border: 'none',
@@ -246,7 +259,16 @@ export default function SlidePanel({ open }: Props) {
                     onMouseEnter={e => (e.currentTarget.style.backgroundColor = '#f9fafb')}
                     onMouseLeave={e => (e.currentTarget.style.backgroundColor = 'transparent')}
                   >
-                    {folder.name}
+                    <span>{folder.name}</span>
+                    {folder.unread_count !== undefined && folder.unread_count > 0 && (
+                      <span style={{
+                        fontSize: 11,
+                        color: '#ffffff',
+                        backgroundColor: '#EA4335',
+                        borderRadius: 10,
+                        padding: '1px 6px',
+                      }}>{folder.unread_count}</span>
+                    )}
                   </button>
                 )}
               </div>

@@ -48,13 +48,16 @@ export default function EmailList({ emails, loading, selectable, onBatchAction, 
   return (
     <div style={{ backgroundColor: '#ffffff', borderRadius: 12, border: '1px solid #e5e7eb', overflow: 'hidden' }}>
 
-      {/* Column header row */}
+      {/* Column header row — sticky so it stays visible while the list scrolls */}
       <div style={{
         display: 'flex',
         alignItems: 'center',
         padding: '10px 16px',
         borderBottom: '1px solid #e5e7eb',
         backgroundColor: '#f9fafb',
+        position: 'sticky',
+        top: 0,
+        zIndex: 1,
       }}>
         {selectable && (
           <input

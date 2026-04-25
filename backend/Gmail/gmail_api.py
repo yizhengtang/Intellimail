@@ -687,7 +687,19 @@ def create_label(service, name, label_list_visibility='labelShow', message_list_
 def list_labels(service, user_id='me'):
     results = service.users().labels().list(userId=user_id).execute()
     labels = results.get('labels', [])
-    return labels
+    # Fetch full details for each label so unread counts are available.
+    # labels.list only returns id/name/type — messagesUnread requires labels.get.
+    detailed = []
+    for label in labels:
+        detail = service.users().labels().get(userId=user_id, id=label['id']).execute()
+        detailed.append({
+            'id': detail.get('id'),
+            'name': detail.get('name'),
+            'type': detail.get('type'),
+            'unread_count': detail.get('messagesUnread', 0),
+            'message_count': detail.get('messagesTotal', 0),
+        })
+    return detailed
 
 #Thius function will get details for a specific label by ID.
 def get_label_details(service, label_id, user_id='me'):
