@@ -153,9 +153,9 @@ export default function CalendarPage() {
                   style={{
                     minHeight: 90,
                     padding: '6px 8px',
-                    borderRight: (i + 1) % 7 === 0 ? 'none' : '1px solid #f3f4f6',
-                    borderBottom: '1px solid #f3f4f6',
-                    backgroundColor: isToday ? '#eff6ff' : '#ffffff',
+                    borderRight: (i + 1) % 7 === 0 ? 'none' : '2px solid #e5e7eb',
+                    borderBottom: '2px solid #e5e7eb',
+                    backgroundColor: isToday ? '#eff6ff' : isCurrentMonth ? '#ffffff' : '#f9fafb',
                   }}
                 >
                   {isCurrentMonth && (
