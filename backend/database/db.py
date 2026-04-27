@@ -27,5 +27,10 @@ def init_db():
             sender_name     TEXT
         )
     ''')
+    #Add sender_name column to existing databases that were created before it was added.
+    try:
+        conn.execute('ALTER TABLE events ADD COLUMN sender_name TEXT')
+    except Exception:
+        pass
     conn.commit()
     conn.close()
