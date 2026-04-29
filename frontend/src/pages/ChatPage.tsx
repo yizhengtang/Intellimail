@@ -55,6 +55,26 @@ export default function ChatPage() {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', backgroundColor: '#ffffff' }}>
 
+      {/* Header with clear button — only shown when there is history */}
+      {history.length > 0 && (
+        <div style={{ display: 'flex', justifyContent: 'flex-end', padding: '12px 40px 0', flexShrink: 0 }}>
+          <button
+            onClick={() => setHistory([])}
+            style={{
+              background: 'none',
+              border: '1px solid #e5e7eb',
+              borderRadius: 8,
+              padding: '5px 12px',
+              fontSize: 12,
+              color: '#6b7280',
+              cursor: 'pointer',
+            }}
+          >
+            Clear chat
+          </button>
+        </div>
+      )}
+
       {/* Message history — fills remaining space, scrolls independently */}
       <div style={{ flex: 1, overflowY: 'auto', padding: '32px 40px 16px' }}>
 
