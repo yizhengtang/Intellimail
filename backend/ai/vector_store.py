@@ -17,6 +17,7 @@ def get_client() -> chromadb.PersistentClient:
 #Returns the unified inbox collection, creating it if it does not exist.
 #get_or_create_collection is idempotent — safe to call on every server restart.
 #cosine distance is correct for text embeddings: meaning is encoded as direction, not magnitude.
+#hnsw: hierarchical navigable small world, it is the algorithm chromadb uses to search vectors quickly.
 def get_collection() -> Collection:
     client = get_client()
     return client.get_or_create_collection(

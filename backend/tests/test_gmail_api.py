@@ -182,8 +182,8 @@ def _make_batch_service(label_name, message_stubs, batch_responses):
 
 
 def test_get_email_messages_returns_formatted_list():
-    msg_stub = {'id': 'msg001'}
-    batch_resp = {
+    message_stripped = {'id': 'msg001'}
+    batch_response = {
         'msg001': {
             'threadId': 'thread001',
             'snippet': 'Email snippet',
@@ -194,7 +194,7 @@ def test_get_email_messages_returns_formatted_list():
             }
         }
     }
-    service = _make_batch_service('inbox', [msg_stub], batch_resp)
+    service = _make_batch_service('inbox', [message_stripped], batch_response)
     result = get_email_messages(service, folder_name='inbox', max_results=1)
     assert len(result) == 1
     assert result[0]['id'] == 'msg001'
@@ -204,8 +204,8 @@ def test_get_email_messages_returns_formatted_list():
 
 
 def test_get_email_messages_marks_read_when_no_unread_label():
-    msg_stub = {'id': 'msg002'}
-    batch_resp = {
+    message_stripped = {'id': 'msg002'}
+    batch_response = {
         'msg002': {
             'threadId': 'thread002',
             'snippet': '',
@@ -213,14 +213,14 @@ def test_get_email_messages_marks_read_when_no_unread_label():
             'payload': {'headers': _make_headers(), 'parts': []}
         }
     }
-    service = _make_batch_service('inbox', [msg_stub], batch_resp)
+    service = _make_batch_service('inbox', [message_stripped], batch_response)
     result = get_email_messages(service, folder_name='inbox', max_results=1)
     assert result[0]['is_read'] is True
 
 
 def test_get_email_messages_detects_attachment():
-    msg_stub = {'id': 'msg003'}
-    batch_resp = {
+    message_stripped = {'id': 'msg003'}
+    batch_response = {
         'msg003': {
             'threadId': 'thread003',
             'snippet': '',
@@ -231,7 +231,7 @@ def test_get_email_messages_detects_attachment():
             }
         }
     }
-    service = _make_batch_service('inbox', [msg_stub], batch_resp)
+    service = _make_batch_service('inbox', [message_stripped], batch_response)
     result = get_email_messages(service, folder_name='inbox', max_results=1)
     assert result[0]['has_attachments'] is True
 
@@ -477,7 +477,7 @@ def test_get_attachment_data_returns_bytes_and_metadata():
 
 def test_search_emails_returns_matching_emails():
     stub = {'id': 'msg001'}
-    batch_resp = {
+    batch_response = {
         'msg001': {
             'threadId': 'thread001',
             'snippet': 'Matching email',
@@ -489,7 +489,7 @@ def test_search_emails_returns_matching_emails():
     service.users.return_value.messages.return_value.list.return_value.execute.return_value = {
         'messages': [stub], 'nextPageToken': None
     }
-    service.new_batch_http_request.side_effect = lambda callback=None: FakeBatch(callback, batch_resp)
+    service.new_batch_http_request.side_effect = lambda callback=None: FakeBatch(callback, batch_response)
     result = search_emails(service, 'important meeting', max_results=5)
     assert len(result) == 1
     assert result[0]['subject'] == 'Search Result'
@@ -732,7 +732,7 @@ def test_create_draft_email_missing_attachment_raises(tmp_path):
 
 def test_list_draft_email_messages_returns_drafts():
     draft_stub = {'id': 'draft001'}
-    batch_resp = {
+    batch_response = {
         'draft001': {
             'id': 'draft001',
             'message': {
@@ -754,7 +754,7 @@ def test_list_draft_email_messages_returns_drafts():
     service.users.return_value.drafts.return_value.list.return_value.execute.return_value = {
         'drafts': [draft_stub], 'nextPageToken': None
     }
-    service.new_batch_http_request.side_effect = lambda callback=None: FakeBatch(callback, batch_resp)
+    service.new_batch_http_request.side_effect = lambda callback=None: FakeBatch(callback, batch_response)
     result = list_draft_email_messages(service)
     assert len(result) == 1
     assert result[0]['id'] == 'draft001'

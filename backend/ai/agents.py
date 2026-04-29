@@ -100,7 +100,10 @@ def extract_events(email_text: str) -> list[dict]:
         max_tokens=500,
         response_format={"type": "json_object"}
     )
-    result = json.loads(response.choices[0].message.content)
+    try:
+        result = json.loads(response.choices[0].message.content)
+    except json.JSONDecodeError:
+        return []
     return result.get("events", [])
 
 #Reply Generation
