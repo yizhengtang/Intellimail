@@ -19,7 +19,6 @@ INTENTS = ["summarize_inbox", "find_email", "compose_reply", "general_question",
 
 #Classifies the user's message into one of four intents.
 #Also extracts a clean search query from the conversational message — better input for RAG
-#than passing the raw message (e.g. "what did Alice say?" → "emails from Alice").
 #history is capped at 6 messages (3 turns) to keep token cost flat across long conversations.
 #Falls back to general_question if the model returns an unrecognised intent.
 def _classify_intent(message: str, history: list[dict]) -> dict:
