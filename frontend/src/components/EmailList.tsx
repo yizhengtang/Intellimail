@@ -1,5 +1,5 @@
 //EmailList.tsx
-//Renders a list of EmailRow components. Handles loading, empty states, and batch selection.
+//Renders emails as a table with column headers: Sender, Message, Channel, Time.
 
 import { useState } from 'react';
 import type { EmailSummary } from '../types/email';
@@ -13,32 +13,21 @@ interface EmailListProps {
   batchActionLabel?: string;
 }
 
-//This component receives the email array and loading flag from the page.
-//It does not fetch data — it only renders what it is given.
-//When selectable is true, checkboxes appear and a batch action bar shows at the top.
 export default function EmailList({ emails, loading, selectable, onBatchAction, batchActionLabel }: EmailListProps) {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
-  //Toggle a single email's selection
   const toggleSelect = (id: string) => {
     setSelectedIds(prev => {
       const next = new Set(prev);
-      if (next.has(id)) {
-        next.delete(id);
-      } else {
-        next.add(id);
-      }
+      next.has(id) ? next.delete(id) : next.add(id);
       return next;
     });
   };
 
-  //Select all or deselect all
   const toggleAll = () => {
-    if (selectedIds.size === emails.length) {
-      setSelectedIds(new Set());
-    } else {
-      setSelectedIds(new Set(emails.map(e => e.id)));
-    }
+    setSelectedIds(
+      selectedIds.size === emails.length ? new Set() : new Set(emails.map(e => e.id))
+    );
   };
 
   const handleBatchAction = () => {
@@ -48,46 +37,43 @@ export default function EmailList({ emails, loading, selectable, onBatchAction, 
     }
   };
 
-  if (loading) return <p>Loading...</p>;
-  if (emails.length === 0) return <p>No emails found.</p>;
+  if (loading) {
+    return <p style={{ padding: '24px 0', color: '#9ca3af', fontSize: 14 }}>Loading...</p>;
+  }
+
+  if (emails.length === 0) {
+    return <p style={{ padding: '24px 0', color: '#9ca3af', fontSize: 14 }}>No emails found.</p>;
+  }
 
   return (
-    <div>
-      {selectable && (
-        <div style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: 12,
-          padding: '8px 12px',
-          borderBottom: '1px solid #e0e0e0',
-          backgroundColor: '#f9f9f9',
-        }}>
+    <div style={{ backgroundColor: '#ffffff', borderRadius: 12, border: '1px solid #e5e7eb', overflow: 'hidden' }}>
+
+      {/* Column header row — sticky so it stays visible while the list scrolls */}
+      <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        padding: '10px 16px',
+        borderBottom: '1px solid #e5e7eb',
+        backgroundColor: '#f9fafb',
+        position: 'sticky',
+        top: 0,
+        zIndex: 1,
+      }}>
+        {selectable && (
           <input
             type="checkbox"
             checked={selectedIds.size === emails.length && emails.length > 0}
             onChange={toggleAll}
-            style={{ cursor: 'pointer' }}
+            style={{ cursor: 'pointer', marginRight: 12, flexShrink: 0 }}
           />
-          <span style={{ fontSize: 14, color: '#555' }}>
-            {selectedIds.size > 0 ? `${selectedIds.size} selected` : 'Select all'}
-          </span>
-          {selectedIds.size > 0 && onBatchAction && (
-            <button
-              onClick={handleBatchAction}
-              style={{
-                padding: '4px 12px',
-                cursor: 'pointer',
-                border: '1px solid #ccc',
-                borderRadius: 4,
-                backgroundColor: 'transparent',
-                fontSize: 14,
-              }}
-            >
-              {batchActionLabel || 'Action'}
-            </button>
-          )}
-        </div>
-      )}
+        )}
+        <div style={{ width: 220, fontSize: 12, fontWeight: 600, color: '#6b7280', flexShrink: 0 }}>Sender</div>
+        <div style={{ flex: 1, fontSize: 12, fontWeight: 600, color: '#6b7280' }}>Message</div>
+        <div style={{ width: 110, fontSize: 12, fontWeight: 600, color: '#6b7280', flexShrink: 0 }}>Channel</div>
+        <div style={{ width: 80, fontSize: 12, fontWeight: 600, color: '#6b7280', textAlign: 'right', flexShrink: 0 }}>Time</div>
+      </div>
+
+      {/* Email rows */}
       {emails.map(email => (
         <EmailRow
           key={email.id}
@@ -97,6 +83,34 @@ export default function EmailList({ emails, loading, selectable, onBatchAction, 
           onSelect={toggleSelect}
         />
       ))}
+
+      {/* Batch action bar — shown at the bottom when items are selected */}
+      {selectable && selectedIds.size > 0 && onBatchAction && (
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 12,
+          padding: '10px 16px',
+          borderTop: '1px solid #e5e7eb',
+          backgroundColor: '#f9fafb',
+        }}>
+          <span style={{ fontSize: 13, color: '#6b7280' }}>{selectedIds.size} selected</span>
+          <button
+            onClick={handleBatchAction}
+            style={{
+              padding: '4px 14px',
+              cursor: 'pointer',
+              border: '1px solid #d1d5db',
+              borderRadius: 6,
+              backgroundColor: '#ffffff',
+              fontSize: 13,
+              color: '#374151',
+            }}
+          >
+            {batchActionLabel || 'Action'}
+          </button>
+        </div>
+      )}
     </div>
   );
 }

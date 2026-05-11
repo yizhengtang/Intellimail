@@ -5,7 +5,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useProvider } from '../context/ProviderContext';
 import ComposeForm from '../components/ComposeForm';
-import type { Provider } from '../types/email';
+import type { EmailViewMode } from '../types/email';
 import * as gmailService from '../services/gmailService';
 import * as outlookService from '../services/outlookService';
 
@@ -18,7 +18,7 @@ export default function ComposePage() {
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const handleSend = async (data: { to: string; subject: string; body: string; provider: Provider }) => {
+  const handleSend = async (data: { to: string; subject: string; body: string; provider: EmailViewMode }) => {
     setSending(true);
     setError(null);
 

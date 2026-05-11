@@ -7,7 +7,7 @@ from MS_Graph import get_access_token, MS_GRAPH_BASE_ENDPOINT
 load_dotenv()
 
 #Initialize Outlook service by getting access token
-def initialize_outlook_service(scopes=['https://graph.microsoft.com/Mail.ReadWrite']):
+def initialize_outlook_service(scopes=['https://graph.microsoft.com/Mail.ReadWrite', 'User.Read']):
     app_id = os.getenv('MICROSOFT_CLIENT_ID')
     client_secret = os.getenv('MICROSOFT_CLIENT_SECRET')
 
@@ -43,13 +43,36 @@ def make_graph_request(access_token, endpoint, method='GET', params=None, json_d
         response.raise_for_status()
         return response.json() if response.text else None
 
+#Maps display names and Gmail label names to Graph API well-known folder names.
+#Graph API only accepts well-known names (e.g. 'sentitems') or GUIDs in the URL path.
+#Display names like 'Sent Items' or Gmail labels like 'SENT' cause a 400 Bad Request.
+OUTLOOK_FOLDER_MAP = {
+    'inbox': 'inbox',
+    'sent items': 'sentitems',
+    'sent': 'sentitems',
+    'sentitems': 'sentitems',
+    'deleted items': 'deleteditems',
+    'deleteditems': 'deleteditems',
+    'trash': 'deleteditems',
+    'drafts': 'drafts',
+    'draft': 'drafts',
+    'junk email': 'junkemail',
+    'junkemail': 'junkemail',
+    'junk': 'junkemail',
+    'spam': 'junkemail',
+    'archive': 'archive',
+    'outbox': 'outbox',
+}
+
 #Function to get email messages from Outlook
 #This function WILL ONLY fetch basic email info (id, sender, subject, receivedDateTime, isRead)
 def get_email_messages(access_token, folder_name='inbox', max_results=10):
     messages = []
 
-    #Build the endpoint - use folder name if provided
-    endpoint = f'me/mailFolders/{folder_name}/messages'
+    #Translate display names and cross-provider label names to Graph API well-known names.
+    #GUIDs (from the folder list) pass through unchanged since they won't match any map key.
+    folder_id = OUTLOOK_FOLDER_MAP.get(folder_name.lower(), folder_name)
+    endpoint = f'me/mailFolders/{folder_id}/messages'
 
     #Parameters for the request
     params = {
@@ -1096,4 +1119,32 @@ def update_draft_email(access_token, draft_id, subject=None, body=None, body_typ
         'subject': updated_draft.get('subject', 'No subject'),
         'status': 'draft updated'
     }
+
+#Returns metadata for every attachment in an email (id, filename, content_type, size).
+#Does not fetch file bytes — only the info needed to render the attachment list in the UI.
+def get_attachment_list(access_token, message_id):
+    endpoint = f'me/messages/{message_id}/attachments'
+    params = {'$select': 'id,name,contentType,size'}
+    result = make_graph_request(access_token, endpoint, params=params)
+    attachments = []
+    for att in result.get('value', []):
+        attachments.append({
+            'id': att.get('id'),
+            'filename': att.get('name', 'attachment'),
+            'content_type': att.get('contentType', 'application/octet-stream'),
+            'size': att.get('size', 0),
+        })
+    return attachments
+
+#Fetches the raw bytes for a single attachment by its attachment_id.
+#Graph API returns contentBytes as standard base64 (not URL-safe like Gmail).
+#Returns (bytes, filename, content_type) so the router can stream the file to the browser.
+def get_attachment_data(access_token, message_id, attachment_id):
+    endpoint = f'me/messages/{message_id}/attachments/{attachment_id}'
+    params = {'$select': 'name,contentType,contentBytes'}
+    result = make_graph_request(access_token, endpoint, params=params)
+    filename = result.get('name', 'attachment')
+    content_type = result.get('contentType', 'application/octet-stream')
+    data = base64.b64decode(result.get('contentBytes', ''))
+    return data, filename, content_type
 

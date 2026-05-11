@@ -1,10 +1,10 @@
 venv/
-PROJECT_PLAN.md
-FRONTEND_PLAN.md
+*.md
 .claude/
 
 ##Backend
 backend/.env
+backend/ai/chroma_db/
 backend/Gmail/token_files/
 backend/Gmail/attachments/
 backend/Gmail/downloads/
@@ -12,6 +12,8 @@ backend/Outlook/attachments/
 backend/Outlook/downloads/
 backend/client_secret.json
 backend/Outlook/*.txt
+backend/Teams/*.txt
+backend/database/*.db
 
 # Python cache files
 __pycache__/
@@ -19,6 +21,10 @@ __pycache__/
 *.pyo
 *.pyd
 .Python
+
+# Test coverage
+.coverage
+htmlcov/
 
 # Log files
 debug.log

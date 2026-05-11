@@ -7,8 +7,14 @@ import InboxPage from '../pages/InboxPage';
 import EmailPage from '../pages/EmailPage';
 import ComposePage from '../pages/ComposePage';
 import DraftsPage from '../pages/DraftsPage';
+import ChatPage from '../pages/ChatPage';
+import SyncPage from '../pages/SyncPage';
+import TeamsPage from '../pages/TeamsPage';
+import TeamsChatPage from '../pages/TeamsChatPage';
+import CalendarPage from '../pages/CalendarPage';
 
-//there are four routes: 1. / (inbox) 2. /email/:provider/:id 3. /compose 4. /drafts
+//there are eight routes: 1. / (inbox) 2. /email/:provider/:id 3. /compose 4. /drafts
+//5. /chat 6. /sync 7. /teams (chat list) 8. /teams/:chatId (single chat)
 //the layout component wraps all routes to provide a consistent ui structure.
 const router = createBrowserRouter([
   {
@@ -18,6 +24,11 @@ const router = createBrowserRouter([
       { path: '/email/:provider/:id', element: <EmailPage /> },
       { path: '/compose', element: <ComposePage /> },
       { path: '/drafts', element: <DraftsPage /> },
+      { path: '/chat', element: <ChatPage /> },
+      { path: '/sync', element: <SyncPage /> },
+      { path: '/teams', element: <TeamsPage /> },
+      { path: '/teams/:chatId', element: <TeamsChatPage /> },
+      { path: '/calendar', element: <CalendarPage /> },
     ],
   },
 ]);

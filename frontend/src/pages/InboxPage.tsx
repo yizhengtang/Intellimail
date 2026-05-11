@@ -1,82 +1,313 @@
 //InboxPage.tsx
-//Main inbox view — shows the email list, search results, or trash view with batch actions.
+//Main inbox view — fills the viewport exactly, with a scrollable email list that fades at the bottom.
 
-import { useSearchParams } from 'react-router-dom';
+import { useState, useEffect } from 'react';
+import { useSearchParams, useNavigate, Link } from 'react-router-dom';
 import { useEmails } from '../hooks/useEmails';
 import { useSearch } from '../hooks/useSearch';
 import { useProvider } from '../context/ProviderContext';
+import { useAuth } from '../context/AuthContext';
 import * as gmailService from '../services/gmailService';
 import * as outlookService from '../services/outlookService';
 import EmailList from '../components/EmailList';
 
+const PER_PAGE_OPTIONS = [10, 20, 30];
+
 //This page reads two URL search params:
 //  ?q=     — search query (shows search results instead of normal inbox)
 //  ?folder= — folder/label name (filters emails by that folder)
-//When the folder is TRASH or Deleted Items, the page enables batch selection
-//with a "Restore" button that calls untrash for the selected emails.
-//In all other folder views, batch selection shows a "Trash" button instead.
 export default function InboxPage() {
   const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
   const query = searchParams.get('q') || '';
-  const folder = searchParams.get('folder') || undefined;
-  const { provider } = useProvider();
+  const folderParam = searchParams.get('folder');
+  //Guard against stale "undefined" string that can appear in the URL from old navigation bugs.
+  const folder = folderParam && folderParam !== 'undefined' ? folderParam : undefined;
 
-  const inbox = useEmails(folder);
+  const { provider } = useProvider();
+  const { authStatus } = useAuth();
+
+  const [searchInput, setSearchInput] = useState(query);
+  const [page, setPage] = useState(1);
+  const [perPage, setPerPage] = useState(10);
+
+  //Fetch 30 emails so client-side pagination has enough data.
+  const inbox = useEmails(folder, 30);
   const search = useSearch(query);
 
   const isSearching = query.length > 0;
-  const emails = isSearching ? search.results : inbox.emails;
+  const allEmails = isSearching ? search.results : inbox.emails;
   const loading = isSearching ? search.loading : inbox.loading;
   const error = isSearching ? search.error : inbox.error;
 
-  //Detect if we are viewing the trash folder
-  //Gmail uses "TRASH", Outlook uses "Deleted Items"
   const isTrash = folder === 'TRASH' || folder === 'Deleted Items';
 
-  //Batch trash — moves selected emails to trash, then refreshes the list
+  //Reset to page 1 whenever the email list changes.
+  useEffect(() => {
+    setPage(1);
+  }, [provider, folder, query, perPage]);
+
+  const totalEmails = allEmails.length;
+  const totalPages = Math.ceil(totalEmails / perPage);
+  const startIndex = (page - 1) * perPage;
+  const endIndex = Math.min(startIndex + perPage, totalEmails);
+  const paginatedEmails = allEmails.slice(startIndex, endIndex);
+
+  function handleSearch(e: { preventDefault(): void }) {
+    e.preventDefault();
+    const trimmed = searchInput.trim();
+    navigate(trimmed ? `/?q=${encodeURIComponent(trimmed)}` : '/');
+  }
+
   const handleBatchTrash = async (selectedIds: string[]) => {
     try {
-      if (provider === 'gmail') {
-        await gmailService.batchTrash(selectedIds);
-      } else if (provider === 'outlook') {
-        await outlookService.batchTrash(selectedIds);
-      }
+      if (provider === 'gmail') await gmailService.batchTrash(selectedIds);
+      else if (provider === 'outlook') await outlookService.batchTrash(selectedIds);
       inbox.refetch();
-    } catch {
-      //Batch action failed — list stays unchanged
-    }
+    } catch { /* list stays unchanged */ }
   };
 
-  //Batch restore — moves selected emails out of trash, then refreshes the list
   const handleBatchRestore = async (selectedIds: string[]) => {
     try {
-      if (provider === 'gmail') {
-        await gmailService.batchUntrash(selectedIds);
-      } else if (provider === 'outlook') {
-        await outlookService.batchUntrash(selectedIds);
-      }
+      if (provider === 'gmail') await gmailService.batchUntrash(selectedIds);
+      else if (provider === 'outlook') await outlookService.batchUntrash(selectedIds);
       inbox.refetch();
-    } catch {
-      //Batch action failed — list stays unchanged
-    }
+    } catch { /* list stays unchanged */ }
   };
 
-  if (error) return <p style={{ padding: 24 }}>{error}</p>;
+  //Guard — show a not-connected message before calling the email API.
+  if (authStatus) {
+    if (provider === 'gmail' && !authStatus.gmail.connected) {
+      return (
+        <div style={{ padding: 24, height: '100%', backgroundColor: '#f3f4f6' }}>
+          <p style={{ color: '#6b7280' }}>Gmail is not connected. Open the Account panel to connect.</p>
+        </div>
+      );
+    }
+    if (provider === 'outlook' && !authStatus.outlook.connected) {
+      return (
+        <div style={{ padding: 24, height: '100%', backgroundColor: '#f3f4f6' }}>
+          <p style={{ color: '#6b7280' }}>Outlook is not connected. Open the Account panel to connect.</p>
+        </div>
+      );
+    }
+    if (provider === 'unified' && !authStatus.gmail.connected && !authStatus.outlook.connected) {
+      return (
+        <div style={{ padding: 24, height: '100%', backgroundColor: '#f3f4f6' }}>
+          <p style={{ color: '#6b7280' }}>No accounts connected. Open the Account panel to connect Gmail or Outlook.</p>
+        </div>
+      );
+    }
+  }
+
+  const sectionLabel = isSearching
+    ? `Results for "${query}"`
+    : folder
+      ? folder
+      : provider === 'unified'
+        ? 'All Inboxes'
+        : 'Inbox';
 
   return (
-    <div>
-      {isSearching && (
-        <p style={{ padding: '12px 24px 0', color: '#555' }}>
-          Search results for &ldquo;{query}&rdquo;
-        </p>
+    <div style={{
+      display: 'flex',
+      flexDirection: 'column',
+      height: '100%',
+      backgroundColor: '#f3f4f6',
+      overflow: 'hidden',
+    }}>
+
+      {/* Top bar — search + compose */}
+      <div style={{ padding: '20px 24px 0', flexShrink: 0 }}>
+        <div style={{ display: 'flex', gap: 12, marginBottom: 16, alignItems: 'center' }}>
+          <form onSubmit={handleSearch} style={{ flex: 1 }}>
+            <div style={{ position: 'relative' }}>
+              <svg
+                width="16" height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="#9ca3af"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                style={{ position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }}
+              >
+                <circle cx="11" cy="11" r="8" />
+                <line x1="21" y1="21" x2="16.65" y2="16.65" />
+              </svg>
+              <input
+                type="text"
+                placeholder="Search emails, contacts or labels"
+                value={searchInput}
+                onChange={e => setSearchInput(e.target.value)}
+                style={{
+                  width: '100%',
+                  padding: '10px 16px 10px 40px',
+                  border: '1px solid #e5e7eb',
+                  borderRadius: 10,
+                  fontSize: 14,
+                  backgroundColor: '#ffffff',
+                  color: '#111827',
+                  outline: 'none',
+                  boxSizing: 'border-box',
+                }}
+              />
+            </div>
+          </form>
+
+          <Link
+            to="/compose"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8,
+              padding: '10px 20px',
+              backgroundColor: '#111827',
+              color: '#ffffff',
+              borderRadius: 10,
+              textDecoration: 'none',
+              fontSize: 14,
+              fontWeight: 600,
+              whiteSpace: 'nowrap',
+              flexShrink: 0,
+            }}
+          >
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" />
+              <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" />
+            </svg>
+            Compose
+          </Link>
+        </div>
+
+        {/* Section header */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+          <span style={{ fontSize: 15, fontWeight: 700, color: '#111827' }}>{sectionLabel}</span>
+          {!isSearching && (
+            <span style={{
+              fontSize: 12,
+              fontWeight: 600,
+              color: '#6b7280',
+              backgroundColor: '#e5e7eb',
+              borderRadius: 20,
+              padding: '1px 8px',
+            }}>
+              {totalEmails}
+            </span>
+          )}
+        </div>
+
+        {error && <p style={{ color: '#dc2626', fontSize: 14, marginBottom: 8 }}>{error}</p>}
+      </div>
+
+      {/* Scrollable email list */}
+      <div style={{ flex: 1, minHeight: 0, position: 'relative' }}>
+        <div style={{ height: '100%', overflowY: 'auto', padding: '0 24px' }}>
+          <EmailList
+            emails={paginatedEmails}
+            loading={loading}
+            selectable={!isSearching}
+            onBatchAction={isTrash ? handleBatchRestore : handleBatchTrash}
+            batchActionLabel={isTrash ? 'Restore' : 'Trash'}
+          />
+        </div>
+
+        {/* Fade overlay at the bottom of the list */}
+        <div style={{
+          position: 'absolute',
+          bottom: 0,
+          left: 0,
+          right: 0,
+          height: 60,
+          background: 'linear-gradient(to bottom, transparent, #f3f4f6)',
+          pointerEvents: 'none',
+        }} />
+      </div>
+
+      {/* Pagination bar */}
+      {!loading && totalEmails > 0 && (
+        <div style={{
+          flexShrink: 0,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          padding: '10px 24px',
+          borderTop: '1px solid #e5e7eb',
+          backgroundColor: '#ffffff',
+          fontSize: 13,
+          color: '#6b7280',
+        }}>
+          {/* Results per page selector */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span>Results per page</span>
+            <select
+              value={perPage}
+              onChange={e => setPerPage(Number(e.target.value))}
+              style={{
+                fontSize: 13,
+                color: '#374151',
+                border: '1px solid #e5e7eb',
+                borderRadius: 6,
+                padding: '2px 6px',
+                cursor: 'pointer',
+                backgroundColor: '#ffffff',
+              }}
+            >
+              {PER_PAGE_OPTIONS.map(n => (
+                <option key={n} value={n}>{n}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* Page range + navigation arrows */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <span>{startIndex + 1}–{endIndex} of {totalEmails}</span>
+            <div style={{ display: 'flex', gap: 4 }}>
+              <button
+                onClick={() => setPage(p => Math.max(1, p - 1))}
+                disabled={page === 1}
+                style={{
+                  width: 28,
+                  height: 28,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  border: '1px solid #e5e7eb',
+                  borderRadius: 6,
+                  backgroundColor: '#ffffff',
+                  cursor: page === 1 ? 'not-allowed' : 'pointer',
+                  color: page === 1 ? '#d1d5db' : '#374151',
+                }}
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="15 18 9 12 15 6" />
+                </svg>
+              </button>
+              <button
+                onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+                disabled={page === totalPages}
+                style={{
+                  width: 28,
+                  height: 28,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  border: '1px solid #e5e7eb',
+                  borderRadius: 6,
+                  backgroundColor: '#ffffff',
+                  cursor: page === totalPages ? 'not-allowed' : 'pointer',
+                  color: page === totalPages ? '#d1d5db' : '#374151',
+                }}
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="9 18 15 12 9 6" />
+                </svg>
+              </button>
+            </div>
+          </div>
+        </div>
       )}
-      <EmailList
-        emails={emails}
-        loading={loading}
-        selectable={!isSearching}
-        onBatchAction={isTrash ? handleBatchRestore : handleBatchTrash}
-        batchActionLabel={isTrash ? 'Restore' : 'Trash'}
-      />
+
     </div>
   );
 }

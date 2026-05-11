@@ -1,5 +1,6 @@
 import os
 from fastapi import APIRouter, HTTPException
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from typing import List, Optional
 from Outlook.outlook_api import (
@@ -14,6 +15,8 @@ from Outlook.outlook_api import (
     get_email_conversations,
     download_attachments,
     download_attachments_all,
+    get_attachment_list,
+    get_attachment_data,
     mark_as_read,
     mark_as_unread,
     move_message_to_folder,
@@ -153,6 +156,30 @@ def download_all_thread_attachments(message_id: str):
     return result
 
 
+#Returns the attachment metadata list for an email — id, filename, content_type, size.
+@router.get("/emails/{message_id}/attachments")
+def list_attachments(message_id: str):
+    token = get_token()
+    return get_attachment_list(token, message_id)
+
+
+#Streams a single attachment directly to the browser.
+#Images get Content-Disposition: inline; everything else triggers a download.
+@router.get("/emails/{message_id}/attachments/{attachment_id}")
+def stream_attachment(message_id: str, attachment_id: str):
+    token = get_token()
+    data, filename, content_type = get_attachment_data(token, message_id, attachment_id)
+    if content_type.startswith('image/'):
+        disposition = 'inline'
+    else:
+        disposition = f'attachment; filename="{filename}"'
+    return StreamingResponse(
+        iter([data]),
+        media_type=content_type,
+        headers={'Content-Disposition': disposition}
+    )
+
+
 #Mark read/unread
 
 @router.patch("/emails/{message_id}/read")
@@ -225,7 +252,20 @@ def get_trash(max_results: int = 10):
 @router.get("/folders")
 def get_folders(include_hidden: bool = False):
     token = get_token()
-    return list_folders(token, include_hidden=include_hidden)
+    raw = list_folders(token, include_hidden=include_hidden)
+    #Remap Outlook-specific field names to the shared Folder interface the frontend expects.
+    #list_folders returns display_name and unread_item_count — the frontend needs name and unread_count.
+    return [
+        {
+            'id': f.get('id'),
+            'name': f.get('display_name'),
+            'parent_folder_id': f.get('parent_folder_id'),
+            'child_folder_count': f.get('child_folder_count', 0),
+            'unread_count': f.get('unread_item_count', 0),
+            'total_count': f.get('total_item_count', 0),
+        }
+        for f in raw
+    ]
 
 
 @router.get("/folders/{folder_id}")
